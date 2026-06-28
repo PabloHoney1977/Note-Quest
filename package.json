@@ -1,0 +1,18 @@
+{
+  "name": "note-quest",
+  "version": "0.1.0",
+  "description": "Note Quest — kids' music note-reading game (freemium iOS PWA)",
+  "scripts": {
+    "build": "mkdir -p www && cp index.html app.js sw.js manifest.json www/ && ([ -d icons ] && cp -r icons www/ || true)",
+    "sync": "npm run build && npx cap sync ios",
+    "test": "node --test test/*.test.cjs"
+  },
+  "author": "Pablo Honey",
+  "license": "ISC",
+  "dependencies": {
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
+    "@revenuecat/purchases-capacitor": "^11.0.0"
+  }
+}

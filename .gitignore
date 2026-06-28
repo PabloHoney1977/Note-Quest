@@ -1,0 +1,8 @@
+node_modules/
+www/
+ios/App/Pods/
+ios/App/build/
+.DS_Store
+test/screenshots/
+test/react*.production.min.js
+*.log

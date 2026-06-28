@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <title>Note Quest</title>
+  <meta name="description" content="Learn to read music notes on the staff — a fun game for kids and beginners." />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#7C4DFF" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <style>
+    /* Light theme (default — kid friendly) */
+    :root{
+      --bg:#f3f0ff; --bg2:#ffffff; --txt:#1d1240; --hint:#6b6390; --border:#e2dcf5;
+      --accent:#7C4DFF; --good:#22C55E; --bad:#EF4444; --gold:#FFB300;
+      --staff:#2a2350; --note:#7C4DFF;
+    }
+    /* Dark theme */
+    :root[data-theme="dark"]{
+      --bg:#15102b; --bg2:#1f1840; --txt:#f3f0ff; --hint:#a79fd0; --border:#332a5e;
+      --accent:#9B7BFF; --good:#34D77B; --bad:#FF6B6B; --gold:#FFC93C;
+      --staff:#d8d0ff; --note:#B49BFF;
+    }
+    *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+    html,body{margin:0; padding:0;}
+    body{
+      background:var(--bg); color:var(--txt);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+      -webkit-font-smoothing:antialiased;
+    }
+    #root{max-width:560px; margin:0 auto; padding:0 16px env(safe-area-inset-bottom);}
+    button{font-family:inherit;}
+  </style>
+  <script>window.__POSTHOG_KEY__='__POSTHOG_KEY__';</script>
+</head>
+<body>
+  <div id="root"></div>
+  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
+    }
+  </script>
+</body>
+</html>
