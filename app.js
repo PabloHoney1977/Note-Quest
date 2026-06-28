@@ -7,20 +7,34 @@ const e = React.createElement;
 const PRICE = '$4.99'; // TBD — kids note-reading apps skew cheap. Single source of truth.
 
 /* ── Staff model ──
- * step 0 = E4 = bottom line (y=96). Each diatonic step up = -7px. */
+ * `step` 0 = bottom staff line (y=96). Each diatonic step up = -7px. The geometry is
+ * identical for every clef; only the note labels per step differ. Both clefs are built so
+ * the shared ledger note is middle C — the bridge between them — which is great for teaching:
+ *   treble: free E4..F5 on-staff, pro ledger = C4(below, middle C), D4, G5, A5.
+ *   bass:   free G2..A3 on-staff, pro ledger = E2, F2, B3, C4(above, middle C). */
 const LS = 14, BOTTOM_Y = 96;
 const PC = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
-// step -> {letter, octave}
-const STEP_NOTES = {
-  '-2':{l:'C',o:4}, '-1':{l:'D',o:4}, '0':{l:'E',o:4}, '1':{l:'F',o:4},
-  '2':{l:'G',o:4}, '3':{l:'A',o:4}, '4':{l:'B',o:4}, '5':{l:'C',o:5},
-  '6':{l:'D',o:5}, '7':{l:'E',o:5}, '8':{l:'F',o:5}, '9':{l:'G',o:5}, '10':{l:'A',o:5},
+const yForStep = (s) => BOTTOM_Y - s * (LS/2);
+const needsLedgerBelow = (s) => s <= -2;               // ledger line(s) below the staff
+const needsLedgerAbove = (s) => s >= 10;               // ledger line(s) above the staff
+
+// Per-clef config: decorative glyph + the step→{letter,octave} map and free/pro step pools.
+const CLEFS = {
+  treble: {
+    name:'Treble', glyph:'𝄞', glyphX:6, glyphY:90, glyphSize:74,
+    notes:{ '-2':{l:'C',o:4}, '-1':{l:'D',o:4}, '0':{l:'E',o:4}, '1':{l:'F',o:4},
+      '2':{l:'G',o:4}, '3':{l:'A',o:4}, '4':{l:'B',o:4}, '5':{l:'C',o:5},
+      '6':{l:'D',o:5}, '7':{l:'E',o:5}, '8':{l:'F',o:5}, '9':{l:'G',o:5}, '10':{l:'A',o:5} },
+    free:[0,1,2,3,4,5,6,7,8], pro:[-2,-1,9,10],
+  },
+  bass: {
+    name:'Bass', glyph:'𝄢', glyphX:8, glyphY:70, glyphSize:52,
+    notes:{ '-2':{l:'E',o:2}, '-1':{l:'F',o:2}, '0':{l:'G',o:2}, '1':{l:'A',o:2},
+      '2':{l:'B',o:2}, '3':{l:'C',o:3}, '4':{l:'D',o:3}, '5':{l:'E',o:3},
+      '6':{l:'F',o:3}, '7':{l:'G',o:3}, '8':{l:'A',o:3}, '9':{l:'B',o:3}, '10':{l:'C',o:4} },
+    free:[0,1,2,3,4,5,6,7,8], pro:[-2,-1,9,10],
+  },
 };
-const yForStep   = (s) => BOTTOM_Y - s * (LS/2);
-const FREE_STEPS = [0,1,2,3,4,5,6,7,8];                 // E4..F5, all on the staff (no ledger)
-const PRO_STEPS  = [-2,-1,9,10];                        // middle-C ledger, D4, G5, A5 ledger
-const needsLedgerBelow = (s) => s <= -2;               // C4 and lower
-const needsLedgerAbove = (s) => s >= 10;               // A5 and higher
 
 const midiOf = (n) => 12 * (n.o + 1) + PC[n.l];
 
@@ -38,18 +52,18 @@ function tone(midi){
 }
 const track = (ev, props) => { try { window.posthog && window.posthog.capture(ev, props); } catch(_){} };
 
-/* ── Treble staff with a single note ── */
-function Staff({ step }){
+/* ── Staff (treble or bass) with a single note ── */
+function Staff({ clef, step }){
+  const C = CLEFS[clef];
   const W = 320, H = 150, x0 = 24, x1 = W-16, noteX = 220;
-  const lines = [0,1,2,3,4].map(i => 40 + i*LS);   // top..bottom: F5 D5 B4 G4 E4
+  const lines = [0,1,2,3,4].map(i => 40 + i*LS);   // 5 staff lines (geometry shared across clefs)
   const y = yForStep(step);
-  const onLine = (step % 2 === 0); // even steps sit on lines (E4=0 line, G4=2 line, ...)
   return e('svg',{ viewBox:`0 0 ${W} ${H}`, width:'100%',
       style:{ display:'block', maxWidth:W, margin:'0 auto', transform:'translateZ(0)', WebkitTransform:'translateZ(0)' } },
     // staff lines
     lines.map((ly,i)=>e('line',{ key:i, x1:x0, y1:ly, x2:x1, y2:ly, stroke:'var(--staff)', strokeWidth:1.6 })),
-    // treble clef (unicode 𝄞; serif fonts render it). Decorative — game works regardless.
-    e('text',{ x:x0+6, y:90, fontSize:74, fill:'var(--staff)', style:{fontFamily:'Georgia,"Times New Roman",serif'} },'𝄞'),
+    // clef glyph (unicode 𝄞 / 𝄢; serif fonts render it). Decorative — game works regardless.
+    e('text',{ x:x0+C.glyphX, y:C.glyphY, fontSize:C.glyphSize, fill:'var(--staff)', style:{fontFamily:'Georgia,"Times New Roman",serif'} }, C.glyph),
     // ledger line through the note when needed
     needsLedgerBelow(step) ? e('line',{ x1:noteX-16, y1:yForStep(-2), x2:noteX+16, y2:yForStep(-2), stroke:'var(--staff)', strokeWidth:1.6 }) : null,
     needsLedgerAbove(step) ? e('line',{ x1:noteX-16, y1:yForStep(10), x2:noteX+16, y2:yForStep(10), stroke:'var(--staff)', strokeWidth:1.6 }) : null,
@@ -80,21 +94,33 @@ function App(){
   const [level, setLevel] = React.useState(() => localStorage.getItem('nq-level') || 'essentials');
   const [theme, setTheme] = React.useState(() => localStorage.getItem('nq-theme') || 'light');
   const [best,  setBest]  = React.useState(() => +(localStorage.getItem('nq-best') || 0));
+  const [clefMode, setClefMode] = React.useState(() => localStorage.getItem('nq-clef') || 'treble'); // treble | bass | both (Pro)
   const [score, setScore] = React.useState(0);
   const [streak,setStreak]= React.useState(0);
   const [fb, setFb]       = React.useState(null);   // {ok, letter} feedback flash, or null
   const [upg, setUpg]     = React.useState(false);
   const isPro = level === 'pro';
 
-  const pool = isPro ? FREE_STEPS.concat(PRO_STEPS) : FREE_STEPS;
-  const pick = React.useCallback(() => pool[(Math.random()*pool.length)|0], [isPro]);
-  const [step, setStep]   = React.useState(() => FREE_STEPS[(Math.random()*FREE_STEPS.length)|0]);
+  // Pick the next note: choose a clef (random when 'both'), then a step from that clef's pool.
+  // Free play stays on the on-staff `free` steps; Pro adds the `pro` ledger-line steps.
+  const pickNote = React.useCallback(() => {
+    const useClef = clefMode === 'both' ? (Math.random()<0.5 ? 'treble' : 'bass') : clefMode;
+    const C = CLEFS[useClef];
+    const steps = isPro ? C.free.concat(C.pro) : C.free;
+    return { clef: useClef, step: steps[(Math.random()*steps.length)|0] };
+  }, [clefMode, isPro]);
+  const [cur, setCur] = React.useState(() => ({ clef:'treble', step: CLEFS.treble.free[(Math.random()*CLEFS.treble.free.length)|0] }));
 
   React.useEffect(()=>{ document.documentElement.dataset.theme = theme; localStorage.setItem('nq-theme',theme); },[theme]);
   React.useEffect(()=>{ localStorage.setItem('nq-level',level); },[level]);
+  React.useEffect(()=>{ localStorage.setItem('nq-clef',clefMode); },[clefMode]);
+  // Bass/Both are Pro-only — if Pro is turned off, fall back to treble.
+  React.useEffect(()=>{ if(!isPro && clefMode!=='treble') setClefMode('treble'); },[isPro]);
+  // Switching clef mode shows a fresh note in the newly selected clef.
+  React.useEffect(()=>{ setCur(pickNote()); setFb(null); },[clefMode]);
   React.useEffect(()=>{ track('app.loaded'); },[]);
 
-  const note = STEP_NOTES[step];
+  const note = CLEFS[cur.clef].notes[cur.step];
 
   const answer = (letter) => {
     if (fb) return;                       // ignore taps during flash
@@ -109,13 +135,24 @@ function App(){
       setStreak(0);
       track('note.missed', { note: note.l + note.o });
     }
-    setTimeout(()=>{ setFb(null); setStep(pick()); }, ok ? 520 : 1100);
+    setTimeout(()=>{ setFb(null); setCur(pickNote()); }, ok ? 520 : 1100);
   };
 
   const card = { background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:18, padding:16, marginBottom:14 };
   const stat = (icon,val,lbl) => e('div',{style:{textAlign:'center',flex:1}},
     e('div',{style:{fontSize:'1.3rem',fontWeight:800}}, icon+' '+val),
     e('div',{style:{fontSize:'.66rem',color:'var(--hint)',letterSpacing:'.05em',marginTop:2}}, lbl));
+
+  // Clef selector. Bass & Both are Pro — tapping them while free opens the upgrade sheet.
+  const clefBtn = (mode,label) => {
+    const active = clefMode===mode, locked = !isPro && mode!=='treble';
+    return e('button',{ key:mode,
+      onClick:()=> locked ? (setUpg(true), track('paywall.shown',{feature:'Bass clef'})) : setClefMode(mode),
+      style:{ flex:1, padding:'9px 0', borderRadius:11, cursor:'pointer', fontSize:'.8rem', fontWeight:800,
+        border:'1px solid '+(active?'var(--accent)':'var(--border)'),
+        background:active?'var(--accent)':'transparent', color:active?'#fff':'var(--hint)' } },
+      label + (locked?' 🔒':''));
+  };
 
   return e(React.Fragment, null,
     e('header',{style:{display:'flex',alignItems:'center',gap:10,padding:'16px 0 10px'}},
@@ -132,8 +169,11 @@ function App(){
 
     e('div',{style:{...card, display:'flex'}}, stat('⭐',score,'SCORE'), stat('🔥',streak,'STREAK'), stat('🏆',best,'BEST')),
 
+    e('div',{style:{display:'flex',gap:6,marginBottom:14}},
+      clefBtn('treble','Treble 𝄞'), clefBtn('bass','Bass 𝄢'), clefBtn('both','Both')),
+
     e('div',{style:{...card, position:'relative'}},
-      e(Staff,{ step }),
+      e(Staff,{ clef:cur.clef, step:cur.step }),
       e('div',{style:{textAlign:'center',fontSize:'.85rem',color:'var(--hint)',marginTop:4}}, 'What note is this?'),
       fb ? e('div',{style:{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
           alignItems:'center', justifyContent:'center', borderRadius:18,
