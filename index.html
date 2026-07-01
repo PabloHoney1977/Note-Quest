@@ -35,7 +35,15 @@
     @keyframes nq-badge { 0%{transform:scale(0) rotate(-18deg);opacity:0} 55%{transform:scale(1.3) rotate(8deg);opacity:1} 100%{transform:scale(1) rotate(0);opacity:1} }
     @keyframes nq-pop { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.15);opacity:1} 100%{transform:scale(1);opacity:1} }
   </style>
-  <script>window.__POSTHOG_KEY__='__POSTHOG_KEY__';</script>
+  <script>
+    window.__POSTHOG_KEY__='__POSTHOG_KEY__';
+    // RevenueCat public SDK key — injected by the native (Capacitor) build.
+    // On the web/PWA build this stays a placeholder and IAP falls back to a local unlock.
+    window.__RC_KEY__='__RC_KEY__';
+    // The Capacitor iOS build should import the plugin and expose it here, e.g.:
+    //   import { Purchases } from '@revenuecat/purchases-capacitor';
+    //   window.Purchases = Purchases;
+  </script>
 </head>
 <body>
   <div id="root"></div>

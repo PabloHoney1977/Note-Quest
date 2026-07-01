@@ -82,6 +82,76 @@ function tone(midi){
 }
 const track = (ev, props) => { try { window.posthog && window.posthog.capture(ev, props); } catch(_){} };
 
+/* ── In-app purchase (RevenueCat) ──
+ * Entitlement 'pro', product 'pro_unlock' (ported from Jazz Guitar Lab, nq- prefixes).
+ * Native path uses the RevenueCat Capacitor plugin when present — the iOS build assigns it to
+ * window.Purchases and sets window.__RC_KEY__. On the web/PWA build there's no store, so we fall
+ * back to a local unlock flag (nq-pro) so the app stays fully testable on GitHub Pages. */
+const IAP = {
+  ENTITLEMENT: 'pro',
+  PRODUCT: 'pro_unlock',
+  _cbs: new Set(),
+  _pro: false,
+  _rc: null,                                   // RevenueCat plugin, when running native
+
+  get isPro(){ return this._pro; },
+  subscribe(cb){ this._cbs.add(cb); return () => this._cbs.delete(cb); },
+  _emit(){ this._cbs.forEach(cb => { try { cb(this._pro); } catch(_){} }); },
+  _set(v){ this._pro = !!v; localStorage.setItem('nq-pro', this._pro ? '1' : '0'); this._emit(); },
+  _entitled(ci){
+    try { return !!(ci && ci.entitlements && ci.entitlements.active && ci.entitlements.active[this.ENTITLEMENT]); }
+    catch(_){ return false; }
+  },
+
+  async init(){
+    this._pro = localStorage.getItem('nq-pro') === '1';   // instant UI from cache
+    this._emit();
+    this._rc = window.Purchases || null;
+    if (this._rc){
+      try {
+        const key = window.__RC_KEY__;
+        if (key && key.indexOf('__') !== 0) await this._rc.configure({ apiKey: key });
+        const { customerInfo } = await this._rc.getCustomerInfo();
+        this._set(this._entitled(customerInfo));
+        if (this._rc.addCustomerInfoUpdateListener)
+          this._rc.addCustomerInfoUpdateListener(ci => this._set(this._entitled(ci)));
+      } catch(err){ track('iap.error', { where:'init', msg:String(err && err.message || err) }); }
+    }
+    return this._pro;
+  },
+
+  async purchase(){
+    if (!this._rc){                              // web fallback — no store, unlock locally for testing
+      this._set(true); track('upgrade.completed', { via:'web' }); return { ok:true, web:true };
+    }
+    try {
+      const { offerings } = await this._rc.getOfferings();
+      const pkgs = (offerings && offerings.current && offerings.current.availablePackages) || [];
+      const pkg = pkgs.find(p => p.product && p.product.identifier === this.PRODUCT) || pkgs[0];
+      let customerInfo;
+      if (pkg) ({ customerInfo } = await this._rc.purchasePackage({ aPackage: pkg }));
+      else     ({ customerInfo } = await this._rc.purchaseStoreProduct({ product:{ identifier:this.PRODUCT } }));
+      const ok = this._entitled(customerInfo); this._set(ok);
+      if (ok) track('upgrade.completed', { via:'store' });
+      return { ok };
+    } catch(err){
+      const cancelled = !!(err && (err.userCancelled || /cancel/i.test(String(err.message || ''))));
+      if (!cancelled) track('iap.error', { where:'purchase', msg:String(err && err.message || err) });
+      return { ok:false, cancelled };
+    }
+  },
+
+  async restore(){
+    if (!this._rc){ const ok = localStorage.getItem('nq-pro') === '1'; this._set(ok); return { ok }; }
+    try {
+      const { customerInfo } = await this._rc.restorePurchases();
+      const ok = this._entitled(customerInfo); this._set(ok);
+      track('iap.restored', { ok });
+      return { ok };
+    } catch(err){ track('iap.error', { where:'restore', msg:String(err && err.message || err) }); return { ok:false }; }
+  },
+};
+
 /* ── Staff with a single note (treble or bass) ── */
 function Staff({ clef, step }){
   const W = 320, H = 150, x0 = 24, x1 = W-16, noteX = 220;
@@ -108,16 +178,32 @@ function Staff({ clef, step }){
   );
 }
 
-/* ── Upgrade sheet (stub — port RevenueCat IAP later) ── */
-function UpgradeSheet({ onClose, onUnlock }){
-  return e('div',{ onClick:onClose, style:{ position:'fixed', inset:0, background:'rgba(20,10,40,.55)', display:'flex', alignItems:'flex-end', zIndex:50 } },
+/* ── Upgrade sheet (RevenueCat purchase + restore) ── */
+function UpgradeSheet({ onClose }){
+  const [busy, setBusy] = React.useState('');   // '' | 'buy' | 'restore'
+  const [msg, setMsg]   = React.useState('');
+  const run = async (kind, fn, failMsg) => {
+    if (busy) return;
+    setBusy(kind); setMsg('');
+    const r = await fn();
+    setBusy('');
+    if (r && r.ok) onClose();                    // entitlement flows in via IAP.subscribe
+    else if (!(r && r.cancelled)) setMsg(failMsg);
+  };
+  return e('div',{ onClick:()=> busy || onClose(), style:{ position:'fixed', inset:0, background:'rgba(20,10,40,.55)', display:'flex', alignItems:'flex-end', zIndex:50 } },
     e('div',{ onClick:ev=>ev.stopPropagation(), style:{ width:'100%', maxWidth:560, margin:'0 auto', background:'var(--bg2)', borderRadius:'20px 20px 0 0', padding:'22px 20px 30px', border:'1px solid var(--border)' } },
       e('div',{style:{width:42,height:5,borderRadius:3,background:'var(--border)',margin:'0 auto 16px'}}),
       e('div',{style:{fontSize:'1.25rem',fontWeight:800,marginBottom:6}},'Unlock Pro 🎉'),
       e('div',{style:{fontSize:'.95rem',color:'var(--hint)',marginBottom:18,lineHeight:1.5}},
-        'Pro adds the bass clef, harder notes (ledger lines & middle C), sharps & flats, and new game modes. One price, forever — no subscription.'),
-      e('button',{ onClick:onUnlock, style:{ width:'100%', padding:16, borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1.05rem', background:'var(--accent)', border:'none', color:'#fff' } }, 'Unlock Pro — ' + PRICE),
-      e('button',{ onClick:onClose, style:{ width:'100%', padding:12, marginTop:10, borderRadius:12, cursor:'pointer', fontWeight:700, background:'transparent', border:'none', color:'var(--hint)' } }, 'Keep playing free')
+        'Pro adds the bass clef, harder notes (ledger lines & middle C), game modes (Timed & Lives), and sharps & flats. One price, forever — no subscription.'),
+      msg ? e('div',{style:{fontSize:'.85rem',color:'var(--bad)',marginBottom:12,fontWeight:600}}, msg) : null,
+      e('button',{ onClick:()=>run('buy', ()=>IAP.purchase(), 'Purchase didn’t complete. Please try again.'), disabled:!!busy,
+        style:{ width:'100%', padding:16, borderRadius:14, cursor:busy?'default':'pointer', opacity:busy&&busy!=='buy'?.6:1, fontWeight:800, fontSize:'1.05rem', background:'var(--accent)', border:'none', color:'#fff' } },
+        busy==='buy' ? 'Unlocking…' : 'Unlock Pro — ' + PRICE),
+      e('button',{ onClick:()=>run('restore', ()=>IAP.restore(), 'No previous purchase found.'), disabled:!!busy,
+        style:{ width:'100%', padding:11, marginTop:10, borderRadius:12, cursor:busy?'default':'pointer', fontWeight:700, background:'transparent', border:'1px solid var(--border)', color:'var(--txt)' } },
+        busy==='restore' ? 'Restoring…' : 'Restore purchase'),
+      e('button',{ onClick:()=> busy || onClose(), style:{ width:'100%', padding:12, marginTop:8, borderRadius:12, cursor:'pointer', fontWeight:700, background:'transparent', border:'none', color:'var(--hint)' } }, 'Keep playing free')
     )
   );
 }
@@ -152,7 +238,7 @@ function Results({ card, reason, score, correct, answered, runBest, best, sticke
 const LETTERS = ['C','D','E','F','G','A','B'];
 
 function App(){
-  const [level, setLevel] = React.useState(() => localStorage.getItem('nq-level') || 'essentials');
+  const [pro, setPro]     = React.useState(() => IAP.isPro || localStorage.getItem('nq-pro') === '1');
   const [clefMode, setClefMode] = React.useState(() => localStorage.getItem('nq-clef') || 'treble');
   const [mode, setMode]   = React.useState(() => localStorage.getItem('nq-mode') || 'endless');
   const [theme, setTheme] = React.useState(() => localStorage.getItem('nq-theme') || 'light');
@@ -171,7 +257,7 @@ function App(){
   const [fb, setFb]       = React.useState(null);   // {ok, letter} feedback flash, or null
   const [reward, setReward] = React.useState(null); // milestone celebration, or null
   const [upg, setUpg]     = React.useState(false);
-  const isPro = level === 'pro';
+  const isPro = pro;
 
   // clef & non-endless modes are Pro features; free users are pinned to treble/endless
   const effClef = isPro ? clefMode : 'treble';
@@ -180,8 +266,9 @@ function App(){
   const pick = React.useCallback(() => pool[(Math.random()*pool.length)|0], [pool]);
   const [q, setQ] = React.useState(() => buildPool(false,'treble')[(Math.random()*9)|0]);
 
+  // entitlement: hydrate from RevenueCat (or web fallback) and stay subscribed
+  React.useEffect(()=>{ const off = IAP.subscribe(setPro); IAP.init(); return off; },[]);
   React.useEffect(()=>{ document.documentElement.dataset.theme = theme; localStorage.setItem('nq-theme',theme); },[theme]);
-  React.useEffect(()=>{ localStorage.setItem('nq-level',level); },[level]);
   React.useEffect(()=>{ localStorage.setItem('nq-clef',clefMode); },[clefMode]);
   React.useEffect(()=>{ localStorage.setItem('nq-mode',mode); },[mode]);
   React.useEffect(()=>{ track('app.loaded'); },[]);
@@ -270,10 +357,12 @@ function App(){
     e('header',{style:{display:'flex',alignItems:'center',gap:10,padding:'16px 0 10px'}},
       e('div',{style:{fontSize:'1.25rem',fontWeight:900,letterSpacing:'-.01em'}},'Note Quest'),
       e('div',{style:{flex:1}}),
-      e('button',{ onClick:()=>setLevel(isPro?'essentials':'pro'), title:'Toggle Pro (dev)',
-        style:{ padding:'5px 10px', borderRadius:20, cursor:'pointer', fontSize:'.72rem', fontWeight:800,
-          border:'1px solid var(--border)', background:isPro?'var(--accent)':'transparent', color:isPro?'#fff':'var(--hint)' } },
-        isPro?'Pro ✦':'Free'),
+      isPro
+        ? e('div',{ style:{ padding:'5px 10px', borderRadius:20, fontSize:'.72rem', fontWeight:800,
+            background:'var(--accent)', color:'#fff' } }, 'Pro ✦')
+        : e('button',{ onClick:()=>{ setUpg(true); track('paywall.shown',{feature:'header'}); },
+            style:{ padding:'5px 10px', borderRadius:20, cursor:'pointer', fontSize:'.72rem', fontWeight:800,
+              border:'1px solid var(--accent)', background:'transparent', color:'var(--accent)' } }, 'Unlock ✦'),
       e('button',{ onClick:()=>setTheme(theme==='light'?'dark':'light'),
         style:{ padding:'5px 9px', borderRadius:20, cursor:'pointer', fontSize:'.85rem', border:'1px solid var(--border)', background:'transparent', color:'var(--txt)' } },
         theme==='light'?'☾':'☀')
@@ -332,7 +421,7 @@ function App(){
             'Bass clef, game modes & more 🔒') : e('div',{style:{height:30}})
         ),
 
-    upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false), onUnlock:()=>{ setLevel('pro'); setUpg(false); track('upgrade.completed'); } }) : null
+    upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false) }) : null
   );
 }
 

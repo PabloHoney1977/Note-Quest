@@ -26,23 +26,29 @@ Single-file React 18 PWA. CDN React (unpkg UMD), no bundler. Everything inline i
 kid-friendly — + `[data-theme="dark"]`). Capacitor iOS + Codemagic to be added.
 
 ## What's Built (current `app.js`)
-A complete, playable **treble-clef note-reading loop**:
-- Staff model: `step` integer where 0 = E4 = bottom line, +1 per diatonic step (−7px y).
-  `STEP_NOTES` maps step→{letter,octave}; `FREE_STEPS` = E4..F5 (on-staff, no ledger);
-  `PRO_STEPS` = middle-C ledger, D4, G5, A5.
-- `Staff` SVG: 5 lines, unicode treble clef glyph (decorative), note head + stem, ledger lines
-  drawn when `needsLedgerBelow/Above`. `translateZ(0)` compositing hint (iOS filtered-SVG gotcha).
-- Game loop: random note → tap one of 7 letter buttons → audio `tone()` + correct/wrong flash →
-  next note. Score (+10 +streak bonus), streak, persisted best (`nq-best`).
-- Freemium: free pool = `FREE_STEPS`; Pro adds `PRO_STEPS` + (future) bass clef/sharps via
-  `UpgradeSheet`. localStorage keys prefixed `nq-`.
-- `PRICE` constant = single source of truth. `track()` PostHog helper + `__POSTHOG_KEY__` placeholder.
+A complete, playable **treble + bass clef note-reading game** with modes, rewards, and IAP:
+- Staff model: `step` integer where 0 = the bottom line, +1 per diatonic step (−7px y). Geometry
+  is clef-independent; `buildSteps(rootLetter,rootOct,…)` derives step→{letter,octave} from the
+  note on the bottom line. `CLEFS` = { treble (E4), bass (G2) }, each with `free` (on-staff) and
+  `pro` (ledger incl. middle C) step pools. `buildPool(isPro,clefMode)` → `{clef,step}` questions.
+- `Staff` SVG: 5 lines, clef glyph (decorative), note head + stem (flips at the middle line),
+  generic ledger lines. `translateZ(0)` compositing hint (iOS filtered-SVG gotcha).
+- Game loop: random note → tap one of 7 letters → audio `tone()` + correct/wrong flash → next.
+  Score (+10 +streak bonus), streak, persisted best (`nq-best`).
+- **Modes** (`MODES`): Endless (free), Timed 60s & Lives ×3 (Pro). Run/results state machine
+  (`phase`), `Results` screen (score / accuracy / best streak / sticker shelf).
+- **Rewards**: streak milestones (every 5) fire a confetti burst + popping sticker badge;
+  collectible `STICKERS` persisted in `nq-stickers`. Keyframes `nq-fall/nq-badge/nq-pop` in `index.html`.
+- **IAP** (`IAP` object): RevenueCat entitlement `pro`, product `pro_unlock`. Native path uses
+  the Capacitor plugin (`window.Purchases`, key `window.__RC_KEY__`); web/PWA falls back to a local
+  unlock (`nq-pro`) so it's testable on Pages. `UpgradeSheet` does purchase + restore. No dev toggle.
+- `PRICE` constant = single source of truth. `track()` PostHog helper (`app.loaded`, `paywall.shown`,
+  `upgrade.completed`, `sticker.earned`, `run.ended`, `iap.*`). All localStorage keys `nq-` prefixed.
 
 ## To Port From Jazz Guitar Lab
-- **`IAP` module** (RevenueCat, entitlement `pro`, product `pro_unlock`) — swap prefixes to `nq-`.
 - **Real instrument samples** for nicer note playback.
-- **Onboarding / tour / streak-milestone** patterns (kids respond well to reward animations —
-  consider stickers/badges instead of the adult streak UI).
+- **Onboarding / tour** patterns.
+- ~~`IAP` module~~ — ported (see above). Wire `window.Purchases` + `__RC_KEY__` in the iOS build.
 
 ## Freemium Split
 - **Free:** treble-clef notes E4–F5, endless mode, score & streak.
@@ -55,9 +61,10 @@ one-time is the likely range. A **studio/teacher license** (bulk unlock) is wort
 the teacher channel. Research before launch. Update only the `PRICE` constant.
 
 ## Next Session Priorities
-1. Bass clef mode + the Pro note pools wired through the gate.
-2. Game modes (timed, lives, results screen) + kid reward animations.
-3. Port the `IAP` module + trial from Jazz Guitar Lab.
-4. App icons, Capacitor iOS project, `codemagic.yaml`.
-5. **Teacher outreach kit** (printable + studio-license concept) — the growth lever.
-6. Pricing research → set `PRICE`.
+1. ✅ Bass clef mode + Pro note pools through the gate.
+2. ✅ Game modes (timed, lives, results) + kid reward animations (confetti + stickers).
+3. ✅ Port the `IAP` module (RevenueCat) — replaces the dev toggle; web fallback for Pages.
+4. **Sharps/flats** as the next Pro content tier (accidental glyph on the note head + answer UI).
+5. App icons, Capacitor iOS project (`window.Purchases` + `__RC_KEY__`), `codemagic.yaml`.
+6. **Teacher outreach kit** (printable + studio-license concept) — the growth lever.
+7. Pricing research → set `PRICE` (consider a studio/teacher bulk license).
