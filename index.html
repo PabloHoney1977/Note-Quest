@@ -30,6 +30,10 @@
     }
     #root{max-width:560px; margin:0 auto; padding:0 16px env(safe-area-inset-bottom);}
     button{font-family:inherit;}
+    /* Reward animations (kid celebration) */
+    @keyframes nq-fall { 0%{transform:translateY(-10px) rotate(0);opacity:1} 100%{transform:translateY(170px) rotate(400deg);opacity:0} }
+    @keyframes nq-badge { 0%{transform:scale(0) rotate(-18deg);opacity:0} 55%{transform:scale(1.3) rotate(8deg);opacity:1} 100%{transform:scale(1) rotate(0);opacity:1} }
+    @keyframes nq-pop { 0%{transform:scale(0);opacity:0} 60%{transform:scale(1.15);opacity:1} 100%{transform:scale(1);opacity:1} }
   </style>
   <script>window.__POSTHOG_KEY__='__POSTHOG_KEY__';</script>
 </head>

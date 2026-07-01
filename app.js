@@ -49,6 +49,25 @@ function buildPool(isPro, clefMode){
   return out;
 }
 
+/* ── Game modes ──
+ * endless is free; timed & lives are the "extra game modes" behind the Pro gate. */
+const MODES = {
+  endless: { name:'Endless', icon:'∞', pro:false },
+  timed:   { name:'Timed',   icon:'⏱', pro:true, seconds:60 },
+  lives:   { name:'Lives',   icon:'❤', pro:true, lives:3 },
+};
+
+/* ── Sticker rewards ── earned at streak milestones, persisted, shown on the results shelf.
+ * Kids collect these; each is also the celebration shown mid-run when the streak lands on it. */
+const STICKERS = [
+  { at:5,  emoji:'🎵', label:'On fire!' },
+  { at:10, emoji:'🌟', label:'Superstar!' },
+  { at:15, emoji:'🚀', label:'Blast off!' },
+  { at:20, emoji:'🏅', label:'Champion!' },
+  { at:30, emoji:'👑', label:'Legend!' },
+];
+const CONFETTI = ['🎉','⭐','🎵','✨','🎈','🌟'];
+
 /* ── Audio (simple bell/note) ── */
 let _actx;
 const ctx = () => (_actx = _actx || new (window.AudioContext || window.webkitAudioContext)());
@@ -103,21 +122,60 @@ function UpgradeSheet({ onClose, onUnlock }){
   );
 }
 
+/* ── Results screen (shown when a timed/lives run ends) ── */
+function Results({ card, reason, score, correct, answered, runBest, best, stickers, onAgain }){
+  const acc = answered ? Math.round(correct/answered*100) : 0;
+  const tile = (val,lbl) => e('div',{style:{textAlign:'center',flex:1}},
+    e('div',{style:{fontSize:'1.4rem',fontWeight:800}}, val),
+    e('div',{style:{fontSize:'.62rem',color:'var(--hint)',letterSpacing:'.05em',marginTop:2}}, lbl));
+  return e('div',{ style:{...card, textAlign:'center'} },
+    e('div',{style:{fontSize:'2.2rem'}}, '🎉'),
+    e('div',{style:{fontSize:'1.3rem',fontWeight:900,margin:'2px 0 2px'}}, reason),
+    e('div',{style:{fontSize:'.85rem',color:'var(--hint)',marginBottom:14}}, 'Great practicing!'),
+    e('div',{style:{display:'flex',marginBottom:16}},
+      tile('⭐ '+score,'SCORE'), tile(correct+'/'+answered,'CORRECT'),
+      tile(acc+'%','ACCURACY'), tile('🔥 '+runBest,'BEST STREAK')),
+    e('div',{style:{fontSize:'.7rem',color:'var(--hint)',letterSpacing:'.06em',marginBottom:8}}, 'STICKER SHELF'),
+    e('div',{style:{display:'flex',justifyContent:'center',gap:10,marginBottom:18,flexWrap:'wrap'}},
+      STICKERS.map(s => { const got = stickers.has(s.at);
+        return e('div',{ key:s.at, title:s.label+' — streak '+s.at,
+          style:{ display:'flex',flexDirection:'column',alignItems:'center',width:52,opacity:got?1:.32,
+            filter:got?'none':'grayscale(1)' }},
+          e('div',{style:{fontSize:'1.7rem'}}, got?s.emoji:'🔒'),
+          e('div',{style:{fontSize:'.58rem',color:'var(--hint)',marginTop:2}}, s.at));
+      })),
+    e('button',{ onClick:onAgain, style:{ width:'100%', padding:15, borderRadius:14, cursor:'pointer',
+      fontWeight:800, fontSize:'1.05rem', background:'var(--accent)', border:'none', color:'#fff' } }, 'Play again ▶')
+  );
+}
+
 const LETTERS = ['C','D','E','F','G','A','B'];
 
 function App(){
   const [level, setLevel] = React.useState(() => localStorage.getItem('nq-level') || 'essentials');
   const [clefMode, setClefMode] = React.useState(() => localStorage.getItem('nq-clef') || 'treble');
+  const [mode, setMode]   = React.useState(() => localStorage.getItem('nq-mode') || 'endless');
   const [theme, setTheme] = React.useState(() => localStorage.getItem('nq-theme') || 'light');
   const [best,  setBest]  = React.useState(() => +(localStorage.getItem('nq-best') || 0));
+  const [stickers, setStickers] = React.useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('nq-stickers') || '[]')); } catch(_) { return new Set(); }
+  });
   const [score, setScore] = React.useState(0);
   const [streak,setStreak]= React.useState(0);
+  const [answered,setAnswered] = React.useState(0);
+  const [correct, setCorrect]  = React.useState(0);
+  const [runBest, setRunBest]  = React.useState(0);
+  const [timeLeft,setTimeLeft] = React.useState(MODES.timed.seconds);
+  const [lives, setLives]      = React.useState(MODES.lives.lives);
+  const [phase, setPhase]      = React.useState('play');   // 'play' | 'results'
   const [fb, setFb]       = React.useState(null);   // {ok, letter} feedback flash, or null
+  const [reward, setReward] = React.useState(null); // milestone celebration, or null
   const [upg, setUpg]     = React.useState(false);
   const isPro = level === 'pro';
 
-  // clef mode is a Pro feature; free users are pinned to treble
+  // clef & non-endless modes are Pro features; free users are pinned to treble/endless
   const effClef = isPro ? clefMode : 'treble';
+  const effMode = isPro ? mode : 'endless';
   const pool = React.useMemo(() => buildPool(isPro, effClef), [isPro, effClef]);
   const pick = React.useCallback(() => pool[(Math.random()*pool.length)|0], [pool]);
   const [q, setQ] = React.useState(() => buildPool(false,'treble')[(Math.random()*9)|0]);
@@ -125,40 +183,84 @@ function App(){
   React.useEffect(()=>{ document.documentElement.dataset.theme = theme; localStorage.setItem('nq-theme',theme); },[theme]);
   React.useEffect(()=>{ localStorage.setItem('nq-level',level); },[level]);
   React.useEffect(()=>{ localStorage.setItem('nq-clef',clefMode); },[clefMode]);
+  React.useEffect(()=>{ localStorage.setItem('nq-mode',mode); },[mode]);
   React.useEffect(()=>{ track('app.loaded'); },[]);
-  // when the pool changes (level / clef mode), serve a fresh question from it
+  // when the pool changes (level / clef mode), serve a fresh question — without ending the run
   React.useEffect(()=>{ setFb(null); setQ(pick()); },[pick]);
+
+  // start a fresh run for the current mode
+  const startRun = React.useCallback(() => {
+    setScore(0); setStreak(0); setAnswered(0); setCorrect(0); setRunBest(0);
+    setTimeLeft(MODES.timed.seconds); setLives(MODES.lives.lives);
+    setFb(null); setReward(null); setPhase('play'); setQ(pick());
+  }, [pick]);
+
+  // countdown for timed mode
+  React.useEffect(()=>{
+    if (phase!=='play' || effMode!=='timed') return;
+    if (timeLeft<=0){ setPhase('results'); track('run.ended',{mode:'timed'}); return; }
+    const id = setTimeout(()=> setTimeLeft(t=>t-1), 1000);
+    return ()=>clearTimeout(id);
+  },[phase, effMode, timeLeft]);
 
   const note = CLEFS[q.clef].steps[q.step];
 
+  // milestone celebration + sticker unlock
+  const celebrate = (ns) => {
+    let s = null;
+    for (const st of STICKERS) if (ns >= st.at) s = st;
+    const particles = Array.from({length:16}, (_,i)=>(
+      { x:(Math.random()*100).toFixed(1), d:(Math.random()*0.35).toFixed(2), emoji:CONFETTI[i%CONFETTI.length] }));
+    setReward({ sticker:s, streak:ns, particles });
+    if (s && !stickers.has(s.at)){
+      setStickers(prev => { const n = new Set(prev); n.add(s.at);
+        localStorage.setItem('nq-stickers', JSON.stringify([...n])); return n; });
+      track('sticker.earned', { at:s.at });
+    }
+    setTimeout(()=> setReward(null), 1400);
+  };
+
   const answer = (letter) => {
-    if (fb) return;                       // ignore taps during flash
+    if (fb || phase!=='play') return;     // ignore taps during flash / results
     const ok = letter === note.l;
     tone(midiOf(note));
     setFb({ ok, letter });
+    setAnswered(a => a+1);
+    let outOfLives = false;
     if (ok){
       const ns = streak + 1;
-      setStreak(ns); setScore(s => s + 10 + streak*2);
+      setStreak(ns); setCorrect(c => c+1); setScore(s => s + 10 + streak*2);
+      setRunBest(b => Math.max(b, ns));
       if (ns > best){ setBest(ns); localStorage.setItem('nq-best', ns); }
+      if (ns % 5 === 0) celebrate(ns);
     } else {
       setStreak(0);
       track('note.missed', { note: note.l + note.o, clef: q.clef });
+      if (effMode==='lives'){ const nl = lives-1; setLives(nl); outOfLives = nl<=0; }
     }
-    setTimeout(()=>{ setFb(null); setQ(pick()); }, ok ? 520 : 1100);
+    setTimeout(()=>{
+      setFb(null);
+      if (outOfLives){ setPhase('results'); track('run.ended',{mode:'lives'}); }
+      else setQ(pick());
+    }, ok ? 520 : 1100);
   };
 
   const card = { background:'var(--bg2)', border:'1px solid var(--border)', borderRadius:18, padding:16, marginBottom:14 };
-  const stat = (icon,val,lbl) => e('div',{style:{textAlign:'center',flex:1}},
-    e('div',{style:{fontSize:'1.3rem',fontWeight:800}}, icon+' '+val),
+  const stat = (icon,val,lbl,danger) => e('div',{style:{textAlign:'center',flex:1}},
+    e('div',{style:{fontSize:'1.3rem',fontWeight:800,color:danger?'var(--bad)':'var(--txt)'}}, icon+' '+val),
     e('div',{style:{fontSize:'.66rem',color:'var(--hint)',letterSpacing:'.05em',marginTop:2}}, lbl));
 
-  // clef selector pill; bass/both require Pro (tapping when locked opens the paywall)
-  const clefBtn = (mode, label) => {
-    const active = clefMode === mode && isPro;
-    const locked = !isPro && mode !== 'treble';
-    return e('button',{ key:mode,
-      onClick:()=>{ if (locked){ setUpg(true); track('paywall.shown',{feature:'clef:'+mode}); } else { setClefMode(mode); } },
-      style:{ flex:1, padding:'8px 0', borderRadius:10, cursor:'pointer', fontSize:'.78rem', fontWeight:800,
+  // contextual third stat depends on the active mode
+  const thirdStat = effMode==='timed' ? stat('⏱', timeLeft, 'TIME', timeLeft<=10)
+                  : effMode==='lives' ? stat('❤', lives, 'LIVES', lives<=1)
+                  : stat('🏆', best, 'BEST');
+
+  // pill selector helper — options may be Pro-gated (tapping when locked opens the paywall)
+  const pill = (curr, opt, label, locked, onPick) => {
+    const active = curr === opt && !locked;
+    return e('button',{ key:opt,
+      onClick:()=>{ if (locked){ setUpg(true); track('paywall.shown',{feature:label}); } else onPick(opt); },
+      style:{ flex:1, padding:'8px 0', borderRadius:10, cursor:'pointer', fontSize:'.76rem', fontWeight:800,
         border:'1px solid var(--border)', background: active ? 'var(--accent)' : 'transparent',
         color: active ? '#fff' : (locked ? 'var(--hint)' : 'var(--txt)') } },
       label + (locked ? ' 🔒' : ''));
@@ -177,32 +279,58 @@ function App(){
         theme==='light'?'☾':'☀')
     ),
 
-    e('div',{style:{...card, display:'flex'}}, stat('⭐',score,'SCORE'), stat('🔥',streak,'STREAK'), stat('🏆',best,'BEST')),
+    e('div',{style:{...card, display:'flex'}}, stat('⭐',score,'SCORE'), stat('🔥',streak,'STREAK'), thirdStat),
 
-    e('div',{style:{display:'flex',gap:6,marginBottom:14}},
-      clefBtn('treble','Treble'), clefBtn('bass','Bass'), clefBtn('both','Both')),
+    phase==='results'
+      ? e(Results,{ card,
+          reason: effMode==='timed' ? "Time's up!" : 'Out of lives!',
+          score, correct, answered, runBest, best, stickers,
+          onAgain: startRun })
+      : e(React.Fragment, null,
+          // mode selector — timed/lives are Pro
+          e('div',{style:{display:'flex',gap:6,marginBottom:10}},
+            Object.keys(MODES).map(m => pill(effMode, m, MODES[m].name + ' ' + MODES[m].icon,
+              !isPro && MODES[m].pro, (v)=>{ setMode(v); startRun(); }))),
+          // clef selector — bass/both are Pro
+          e('div',{style:{display:'flex',gap:6,marginBottom:14}},
+            ['treble','bass','both'].map(c => pill(effClef, c, CLEFS[c] ? CLEFS[c].name : 'Both',
+              !isPro && c!=='treble', setClefMode))),
 
-    e('div',{style:{...card, position:'relative'}},
-      e(Staff,{ clef:q.clef, step:q.step }),
-      e('div',{style:{textAlign:'center',fontSize:'.85rem',color:'var(--hint)',marginTop:4}}, 'What note is this?'),
-      fb ? e('div',{style:{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
-          alignItems:'center', justifyContent:'center', borderRadius:18,
-          background: fb.ok?'rgba(34,197,94,.16)':'rgba(239,68,68,.16)' }},
-          e('div',{style:{fontSize:'2.4rem'}}, fb.ok?'✅':'❌'),
-          !fb.ok ? e('div',{style:{fontWeight:800,marginTop:4}}, 'It was '+note.l) : null
-        ) : null
-    ),
+          e('div',{style:{...card, position:'relative', overflow:'hidden'}},
+            e(Staff,{ clef:q.clef, step:q.step }),
+            e('div',{style:{textAlign:'center',fontSize:'.85rem',color:'var(--hint)',marginTop:4}}, 'What note is this?'),
+            // plain correct/wrong flash (suppressed during a milestone celebration)
+            (fb && !reward) ? e('div',{style:{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
+                alignItems:'center', justifyContent:'center', borderRadius:18,
+                background: fb.ok?'rgba(34,197,94,.16)':'rgba(239,68,68,.16)' }},
+                e('div',{style:{fontSize:'2.4rem'}}, fb.ok?'✅':'❌'),
+                !fb.ok ? e('div',{style:{fontWeight:800,marginTop:4}}, 'It was '+note.l) : null
+              ) : null,
+            // milestone reward burst: falling confetti + a popping sticker badge
+            reward ? e('div',{style:{ position:'absolute', inset:0, pointerEvents:'none', borderRadius:18,
+                background:'rgba(124,77,255,.10)' }},
+                reward.particles.map((p,i)=>e('span',{ key:i, style:{ position:'absolute', left:p.x+'%', top:'-8px',
+                  fontSize:'1.2rem', animation:`nq-fall 1.2s ${p.d}s ease-in forwards` } }, p.emoji)),
+                reward.sticker ? e('div',{style:{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
+                    alignItems:'center', justifyContent:'center' }},
+                    e('div',{style:{fontSize:'3rem', animation:'nq-badge .6s ease-out both'}}, reward.sticker.emoji),
+                    e('div',{style:{fontWeight:900, fontSize:'1.05rem', color:'var(--accent)', animation:'nq-pop .5s ease-out both'}}, reward.sticker.label),
+                    e('div',{style:{fontWeight:700, color:'var(--hint)', fontSize:'.85rem'}}, reward.streak+' streak!')
+                  ) : null
+              ) : null
+          ),
 
-    e('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:14}},
-      LETTERS.map(L => e('button',{ key:L, onClick:()=>answer(L),
-        style:{ padding:'18px 0', borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1.15rem',
-          border:'1px solid var(--border)', background:'var(--bg2)', color:'var(--txt)' } }, L))
-    ),
+          e('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:14}},
+            LETTERS.map(L => e('button',{ key:L, onClick:()=>answer(L),
+              style:{ padding:'18px 0', borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1.15rem',
+                border:'1px solid var(--border)', background:'var(--bg2)', color:'var(--txt)' } }, L))
+          ),
 
-    !isPro ? e('button',{ onClick:()=>{ setUpg(true); track('paywall.shown',{feature:'Harder notes'}); },
-      style:{ width:'100%', padding:'13px', borderRadius:14, cursor:'pointer', fontWeight:700,
-        border:'1px dashed var(--accent)', background:'transparent', color:'var(--accent)', marginBottom:30 } },
-      'Bass clef, harder notes & more 🔒') : e('div',{style:{height:30}}),
+          !isPro ? e('button',{ onClick:()=>{ setUpg(true); track('paywall.shown',{feature:'Harder notes'}); },
+            style:{ width:'100%', padding:'13px', borderRadius:14, cursor:'pointer', fontWeight:700,
+              border:'1px dashed var(--accent)', background:'transparent', color:'var(--accent)', marginBottom:30 } },
+            'Bass clef, game modes & more 🔒') : e('div',{style:{height:30}})
+        ),
 
     upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false), onUnlock:()=>{ setLevel('pro'); setUpg(false); track('upgrade.completed'); } }) : null
   );
