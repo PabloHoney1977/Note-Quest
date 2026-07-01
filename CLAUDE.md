@@ -39,6 +39,9 @@ A complete, playable **treble + bass clef note-reading game** with modes, reward
   (`phase`), `Results` screen (score / accuracy / best streak / sticker shelf).
 - **Rewards**: streak milestones (every 5) fire a confetti burst + popping sticker badge;
   collectible `STICKERS` persisted in `nq-stickers`. Keyframes `nq-fall/nq-badge/nq-pop` in `index.html`.
+- **Sharps/flats** (`nq-acc`, Pro): opt-in toggle. `pick()` attaches a sensible ♯/♭ (~45% of eligible
+  notes, skipping E♯/B♯/C♭/F♭); `Staff` draws the accidental glyph; answer needs a ♮/♯/♭ pick
+  (`selAcc`) + the letter; audio shifts a semitone.
 - **IAP** (`IAP` object): RevenueCat entitlement `pro`, product `pro_unlock`. Native path uses
   the Capacitor plugin (`window.Purchases`, key `window.__RC_KEY__`); web/PWA falls back to a local
   unlock (`nq-pro`) so it's testable on Pages. `UpgradeSheet` does purchase + restore. No dev toggle.
@@ -64,7 +67,7 @@ the teacher channel. Research before launch. Update only the `PRICE` constant.
 1. ✅ Bass clef mode + Pro note pools through the gate.
 2. ✅ Game modes (timed, lives, results) + kid reward animations (confetti + stickers).
 3. ✅ Port the `IAP` module (RevenueCat) — replaces the dev toggle; web fallback for Pages.
-4. **Sharps/flats** as the next Pro content tier (accidental glyph on the note head + answer UI).
+4. ✅ Sharps/flats Pro tier (accidental glyph + ♮/♯/♭ answer UI + semitone audio).
 5. App icons, Capacitor iOS project (`window.Purchases` + `__RC_KEY__`), `codemagic.yaml`.
 6. **Teacher outreach kit** (printable + studio-license concept) — the growth lever.
 7. Pricing research → set `PRICE` (consider a studio/teacher bulk license).

@@ -152,8 +152,8 @@ const IAP = {
   },
 };
 
-/* ── Staff with a single note (treble or bass) ── */
-function Staff({ clef, step }){
+/* ── Staff with a single note (treble or bass), optional accidental ── */
+function Staff({ clef, step, acc }){
   const W = 320, H = 150, x0 = 24, x1 = W-16, noteX = 220;
   const def = CLEFS[clef];
   const lines = [0,1,2,3,4].map(i => 40 + i*LS);   // 5 staff lines
@@ -171,6 +171,9 @@ function Staff({ clef, step }){
     e('text',{ x:x0+6, y:def.glyphY, fontSize:def.glyphSize, fill:'var(--staff)', style:{fontFamily:'Georgia,"Times New Roman",serif'} }, def.glyph),
     // ledger lines through the note when needed
     ledgers.map((s,i)=>e('line',{ key:'l'+i, x1:noteX-16, y1:yForStep(s), x2:noteX+16, y2:yForStep(s), stroke:'var(--staff)', strokeWidth:1.6 })),
+    // accidental glyph, to the left of the note head
+    acc ? e('text',{ x:noteX-16, y:y+8, fontSize:26, fill:'var(--note)', textAnchor:'end',
+      style:{ fontFamily:'Georgia,"Times New Roman",serif', fontWeight:700 } }, acc===1?'♯':'♭') : null,
     // note head
     e('ellipse',{ cx:noteX, cy:y, rx:11, ry:8.5, fill:'var(--note)', stroke:'var(--note)' }),
     // stem (up on the right, down on the left, per convention)
@@ -236,11 +239,19 @@ function Results({ card, reason, score, correct, answered, runBest, best, sticke
 }
 
 const LETTERS = ['C','D','E','F','G','A','B'];
+const ACCIDENTALS = [['♮',0],['♯',1],['♭',-1]];
+const accSym  = (a) => a===1 ? '♯' : a===-1 ? '♭' : '';
+const noteName = (note, acc) => note.l + accSym(acc);
+// which accidentals read naturally for a letter (skip E♯/B♯ = F/C and C♭/F♭ = B/E)
+const canSharp = (l) => l!=='E' && l!=='B';
+const canFlat  = (l) => l!=='C' && l!=='F';
 
 function App(){
   const [pro, setPro]     = React.useState(() => IAP.isPro || localStorage.getItem('nq-pro') === '1');
   const [clefMode, setClefMode] = React.useState(() => localStorage.getItem('nq-clef') || 'treble');
   const [mode, setMode]   = React.useState(() => localStorage.getItem('nq-mode') || 'endless');
+  const [accidentals, setAccidentals] = React.useState(() => localStorage.getItem('nq-acc') === '1');
+  const [selAcc, setSelAcc] = React.useState(0);   // player's chosen accidental for the current answer
   const [theme, setTheme] = React.useState(() => localStorage.getItem('nq-theme') || 'light');
   const [best,  setBest]  = React.useState(() => +(localStorage.getItem('nq-best') || 0));
   const [stickers, setStickers] = React.useState(() => {
@@ -259,27 +270,39 @@ function App(){
   const [upg, setUpg]     = React.useState(false);
   const isPro = pro;
 
-  // clef & non-endless modes are Pro features; free users are pinned to treble/endless
+  // clef, non-endless modes & accidentals are Pro features; free users are pinned to treble/endless/naturals
   const effClef = isPro ? clefMode : 'treble';
   const effMode = isPro ? mode : 'endless';
+  const effAcc  = isPro && accidentals;
   const pool = React.useMemo(() => buildPool(isPro, effClef), [isPro, effClef]);
-  const pick = React.useCallback(() => pool[(Math.random()*pool.length)|0], [pool]);
-  const [q, setQ] = React.useState(() => buildPool(false,'treble')[(Math.random()*9)|0]);
+  // pick a {clef,step} and, when accidentals are on, sometimes attach a sensible sharp/flat
+  const pick = React.useCallback(() => {
+    const base = pool[(Math.random()*pool.length)|0];
+    let acc = 0;
+    if (effAcc){
+      const L = CLEFS[base.clef].steps[base.step].l;
+      const opts = []; if (canSharp(L)) opts.push(1); if (canFlat(L)) opts.push(-1);
+      if (opts.length && Math.random() < 0.45) acc = opts[(Math.random()*opts.length)|0];
+    }
+    return { ...base, acc };
+  }, [pool, effAcc]);
+  const [q, setQ] = React.useState(() => ({ ...buildPool(false,'treble')[(Math.random()*9)|0], acc:0 }));
 
   // entitlement: hydrate from RevenueCat (or web fallback) and stay subscribed
   React.useEffect(()=>{ const off = IAP.subscribe(setPro); IAP.init(); return off; },[]);
   React.useEffect(()=>{ document.documentElement.dataset.theme = theme; localStorage.setItem('nq-theme',theme); },[theme]);
   React.useEffect(()=>{ localStorage.setItem('nq-clef',clefMode); },[clefMode]);
   React.useEffect(()=>{ localStorage.setItem('nq-mode',mode); },[mode]);
+  React.useEffect(()=>{ localStorage.setItem('nq-acc', accidentals ? '1' : '0'); },[accidentals]);
   React.useEffect(()=>{ track('app.loaded'); },[]);
-  // when the pool changes (level / clef mode), serve a fresh question — without ending the run
-  React.useEffect(()=>{ setFb(null); setQ(pick()); },[pick]);
+  // when the pool/accidentals change, serve a fresh question — without ending the run
+  React.useEffect(()=>{ setFb(null); setSelAcc(0); setQ(pick()); },[pick]);
 
   // start a fresh run for the current mode
   const startRun = React.useCallback(() => {
     setScore(0); setStreak(0); setAnswered(0); setCorrect(0); setRunBest(0);
     setTimeLeft(MODES.timed.seconds); setLives(MODES.lives.lives);
-    setFb(null); setReward(null); setPhase('play'); setQ(pick());
+    setFb(null); setReward(null); setSelAcc(0); setPhase('play'); setQ(pick());
   }, [pick]);
 
   // countdown for timed mode
@@ -309,8 +332,8 @@ function App(){
 
   const answer = (letter) => {
     if (fb || phase!=='play') return;     // ignore taps during flash / results
-    const ok = letter === note.l;
-    tone(midiOf(note));
+    const ok = letter === note.l && selAcc === q.acc;   // letter and accidental must both match
+    tone(midiOf(note) + q.acc);
     setFb({ ok, letter });
     setAnswered(a => a+1);
     let outOfLives = false;
@@ -322,13 +345,13 @@ function App(){
       if (ns % 5 === 0) celebrate(ns);
     } else {
       setStreak(0);
-      track('note.missed', { note: note.l + note.o, clef: q.clef });
+      track('note.missed', { note: noteName(note, q.acc) + note.o, clef: q.clef });
       if (effMode==='lives'){ const nl = lives-1; setLives(nl); outOfLives = nl<=0; }
     }
     setTimeout(()=>{
       setFb(null);
       if (outOfLives){ setPhase('results'); track('run.ended',{mode:'lives'}); }
-      else setQ(pick());
+      else { setSelAcc(0); setQ(pick()); }
     }, ok ? 520 : 1100);
   };
 
@@ -381,19 +404,25 @@ function App(){
             Object.keys(MODES).map(m => pill(effMode, m, MODES[m].name + ' ' + MODES[m].icon,
               !isPro && MODES[m].pro, (v)=>{ setMode(v); startRun(); }))),
           // clef selector — bass/both are Pro
-          e('div',{style:{display:'flex',gap:6,marginBottom:14}},
+          e('div',{style:{display:'flex',gap:6,marginBottom:10}},
             ['treble','bass','both'].map(c => pill(effClef, c, CLEFS[c] ? CLEFS[c].name : 'Both',
               !isPro && c!=='treble', setClefMode))),
+          // sharps & flats toggle — Pro content tier
+          e('button',{ onClick:()=>{ if (!isPro){ setUpg(true); track('paywall.shown',{feature:'accidentals'}); } else setAccidentals(a=>!a); },
+            style:{ width:'100%', padding:'9px 0', borderRadius:10, marginBottom:14, cursor:'pointer', fontSize:'.76rem', fontWeight:800,
+              border:'1px solid var(--border)', background: effAcc ? 'var(--accent)' : 'transparent',
+              color: effAcc ? '#fff' : (!isPro ? 'var(--hint)' : 'var(--txt)') } },
+            'Sharps & Flats ♯♭' + (effAcc ? '  ✓' : '') + (!isPro ? '  🔒' : '')),
 
           e('div',{style:{...card, position:'relative', overflow:'hidden'}},
-            e(Staff,{ clef:q.clef, step:q.step }),
+            e(Staff,{ clef:q.clef, step:q.step, acc:q.acc }),
             e('div',{style:{textAlign:'center',fontSize:'.85rem',color:'var(--hint)',marginTop:4}}, 'What note is this?'),
             // plain correct/wrong flash (suppressed during a milestone celebration)
             (fb && !reward) ? e('div',{style:{ position:'absolute', inset:0, display:'flex', flexDirection:'column',
                 alignItems:'center', justifyContent:'center', borderRadius:18,
                 background: fb.ok?'rgba(34,197,94,.16)':'rgba(239,68,68,.16)' }},
                 e('div',{style:{fontSize:'2.4rem'}}, fb.ok?'✅':'❌'),
-                !fb.ok ? e('div',{style:{fontWeight:800,marginTop:4}}, 'It was '+note.l) : null
+                !fb.ok ? e('div',{style:{fontWeight:800,marginTop:4}}, 'It was '+noteName(note, q.acc)) : null
               ) : null,
             // milestone reward burst: falling confetti + a popping sticker badge
             reward ? e('div',{style:{ position:'absolute', inset:0, pointerEvents:'none', borderRadius:18,
@@ -408,6 +437,14 @@ function App(){
                   ) : null
               ) : null
           ),
+
+          // accidental picker — set this to match the ♯/♭/♮ before tapping the letter
+          effAcc ? e('div',{style:{display:'flex',gap:6,margin:'0 auto 8px',maxWidth:260}},
+            ACCIDENTALS.map(([sym,val]) => e('button',{ key:val, onClick:()=>setSelAcc(val),
+              style:{ flex:1, padding:'10px 0', borderRadius:12, cursor:'pointer', fontSize:'1.35rem', fontWeight:800,
+                border:'1px solid '+(selAcc===val?'var(--accent)':'var(--border)'),
+                background: selAcc===val?'var(--accent)':'var(--bg2)', color: selAcc===val?'#fff':'var(--txt)' } }, sym))
+          ) : null,
 
           e('div',{style:{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:6,marginBottom:14}},
             LETTERS.map(L => e('button',{ key:L, onClick:()=>answer(L),
