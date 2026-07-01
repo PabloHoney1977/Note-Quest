@@ -1,0 +1,12 @@
+{
+  "appId": "com.musicappstudio.notequest",
+  "appName": "Note Quest",
+  "webDir": "www",
+  "ios": {
+    "contentInset": "always",
+    "backgroundColor": "#f3f0ff"
+  },
+  "plugins": {
+    "Purchases": {}
+  }
+}

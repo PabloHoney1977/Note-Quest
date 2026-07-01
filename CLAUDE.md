@@ -23,7 +23,8 @@ The "teacher outreach kit" on the roadmap is therefore a priority, not an aftert
 ## Stack
 Single-file React 18 PWA. CDN React (unpkg UMD), no bundler. Everything inline in `app.js`
 (`e()` = `React.createElement`). Two `:root` theme blocks in `index.html` (light default —
-kid-friendly — + `[data-theme="dark"]`). Capacitor iOS + Codemagic to be added.
+kid-friendly — + `[data-theme="dark"]`). Capacitor iOS + Codemagic wired (native RevenueCat
+bridge bundled via esbuild; web app stays build-free — see the Capacitor scaffold below).
 
 ## What's Built (current `app.js`)
 A complete, playable **treble + bass clef note-reading game** with modes, rewards, and IAP:
@@ -68,6 +69,8 @@ the teacher channel. Research before launch. Update only the `PRICE` constant.
 2. ✅ Game modes (timed, lives, results) + kid reward animations (confetti + stickers).
 3. ✅ Port the `IAP` module (RevenueCat) — replaces the dev toggle; web fallback for Pages.
 4. ✅ Sharps/flats Pro tier (accidental glyph + ♮/♯/♭ answer UI + semitone audio).
-5. App icons, Capacitor iOS project (`window.Purchases` + `__RC_KEY__`), `codemagic.yaml`.
+5. ✅ Capacitor iOS scaffold: `capacitor.config.json` (webDir `www`), `scripts/prepare-www.mjs`
+   (esbuild-bundles `native/rc-bridge.mjs` → `www/native.js`, sets `window.Purchases`+`__RC_KEY__`),
+   `codemagic.yaml` (generates `ios/`, syncs, TestFlight), app icons. Run `npx cap add ios` in CI.
 6. **Teacher outreach kit** (printable + studio-license concept) — the growth lever.
 7. Pricing research → set `PRICE` (consider a studio/teacher bulk license).

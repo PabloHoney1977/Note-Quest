@@ -125,7 +125,8 @@ const IAP = {
       this._set(true); track('upgrade.completed', { via:'web' }); return { ok:true, web:true };
     }
     try {
-      const { offerings } = await this._rc.getOfferings();
+      const res = await this._rc.getOfferings();       // plugin returns the offerings object directly
+      const offerings = (res && res.offerings) ? res.offerings : res;
       const pkgs = (offerings && offerings.current && offerings.current.availablePackages) || [];
       const pkg = pkgs.find(p => p.product && p.product.identifier === this.PRODUCT) || pkgs[0];
       let customerInfo;
