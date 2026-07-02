@@ -80,6 +80,29 @@ function tone(midi){
   g.gain.exponentialRampToValueAtTime(0.0001,t+0.9);
   o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.9);
 }
+// per-instrument timbre for the "tap to play" strum
+const TIMBRE = {
+  guitar: { wave:'triangle', attack:0.006, decay:1.2, stagger:0.05,  gain:0.22, cutoff:2800 },
+  banjo:  { wave:'square',   attack:0.003, decay:0.65, stagger:0.04, gain:0.12, cutoff:3200 },
+  violin: { wave:'sawtooth', attack:0.09,  decay:1.7, stagger:0.0,   gain:0.10, cutoff:2200 },
+};
+// strum a cheerful major chord; timbre depends on the built instrument
+function playInstrument(cfg){
+  const c = ctx(); if (c.state==='suspended') c.resume();
+  const t = TIMBRE[(cfg && cfg.instrument)] || TIMBRE.guitar;
+  const t0 = c.currentTime;
+  [60,64,67,72].forEach((midi,i)=>{                    // C major: C4 E4 G4 C5
+    const start = t0 + i*t.stagger, end = start + t.attack + t.decay;
+    const o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter();
+    o.type = t.wave; o.frequency.value = 440 * Math.pow(2, (midi-69)/12);
+    lp.type = 'lowpass'; lp.frequency.value = t.cutoff; lp.Q.value = 0.7;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.linearRampToValueAtTime(t.gain, start + t.attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, end);
+    o.connect(lp); lp.connect(g); g.connect(c.destination);
+    o.start(start); o.stop(end + 0.05);
+  });
+}
 const track = (ev, props) => { try { window.posthog && window.posthog.capture(ev, props); } catch(_){} };
 
 /* ── In-app purchase (RevenueCat) ──
@@ -328,6 +351,15 @@ function Instrument({ cfg, size }){
   return e('svg',{ viewBox:'0 0 160 300', width:w, height:h, style:{ display:'block', margin:'0 auto' } }, p);
 }
 
+/* A tappable instrument that strums (audio) and wiggles when played. */
+function PlayableInstrument({ cfg, size }){
+  const [buzz, setBuzz] = React.useState(0);
+  const play = () => { playInstrument(cfg); track('instrument.played', { instrument: cfg && cfg.instrument }); setBuzz(b => b+1); };
+  return e('div',{ onClick:play, title:'Tap to play', style:{ cursor:'pointer', display:'inline-block' } },
+    e('div',{ key:buzz, style:{ animation: buzz ? 'nq-strum .5s ease-out' : 'none', transformOrigin:'50% 20%' } },
+      e(Instrument,{ cfg, size })));
+}
+
 /* Full-screen modal: a per-stage customization choice, or the completion celebration. */
 function WorkshopModal({ ws, build, onChoose, onClose }){
   const overlay = { position:'fixed', inset:0, background:'rgba(20,10,40,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:60, padding:20 };
@@ -336,8 +368,8 @@ function WorkshopModal({ ws, build, onChoose, onClose }){
     const it = instOf(ws.finished.cfg.instrument);
     return e('div',{style:overlay}, e('div',{style:card},
       e('div',{style:{fontSize:'1.2rem',fontWeight:900,marginBottom:8}}, 'You built a '+it.name+'! 🎉'),
-      e(Instrument,{ cfg:ws.finished.cfg, size:150 }),
-      e('div',{style:{color:'var(--hint)',fontSize:'.85rem',marginTop:8}},'It’s on your shelf. A new build starts as you keep going!'),
+      e(PlayableInstrument,{ cfg:ws.finished.cfg, size:150 }),
+      e('div',{style:{color:'var(--hint)',fontSize:'.85rem',marginTop:8}},'🔊 Tap it to play! It’s on your shelf now — a new build starts as you keep going.'),
       e('button',{ onClick:onClose, style:{ width:'100%', marginTop:14, padding:14, borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1rem', background:'var(--accent)', border:'none', color:'#fff' } }, 'Awesome!')
     ));
   }
@@ -364,7 +396,7 @@ function WorkshopSheet({ build, shelf, onClose }){
       e('div',{style:{fontSize:'1.15rem',fontWeight:900,marginBottom:12}},'Instrument Workshop 🔨'),
       started
         ? e('div',{style:{display:'flex',gap:14,alignItems:'center',marginBottom:18}},
-            e(Instrument,{ cfg:build.cfg, size:90 }),
+            e(PlayableInstrument,{ cfg:build.cfg, size:90 }),
             e('div',{style:{flex:1,textAlign:'left'}},
               e('div',{style:{fontWeight:800,marginBottom:4}}, instOf(build.cfg.instrument).name+' — in progress'),
               stage ? e('div',{style:{fontSize:'.8rem',color:'var(--hint)',marginBottom:8}}, 'Next: '+stage.title) : null,
@@ -372,11 +404,11 @@ function WorkshopSheet({ build, shelf, onClose }){
                 e('div',{style:{height:'100%',width:Math.round(build.prog/stage.cost*100)+'%',background:'var(--accent)'}})) : null,
               stage ? e('div',{style:{fontSize:'.72rem',color:'var(--hint)',marginTop:4}}, build.prog+' / '+stage.cost+' correct to next part') : null))
         : e('div',{style:{fontSize:'.9rem',color:'var(--hint)',marginBottom:18}},'Answer notes correctly to start building — your first instrument unlocks at 5 right!'),
-      e('div',{style:{fontSize:'.72rem',color:'var(--hint)',letterSpacing:'.06em',marginBottom:8}}, 'SHELF · '+shelf.length),
+      e('div',{style:{fontSize:'.72rem',color:'var(--hint)',letterSpacing:'.06em',marginBottom:8}}, 'SHELF · '+shelf.length+(shelf.length?'  ·  🔊 tap to play':'')),
       shelf.length
         ? e('div',{style:{display:'flex',flexWrap:'wrap',gap:10}},
             shelf.map((it,i)=>e('div',{ key:i, style:{ width:70, textAlign:'center' } },
-              e(Instrument,{ cfg:it.cfg, size:64 }),
+              e(PlayableInstrument,{ cfg:it.cfg, size:64 }),
               e('div',{style:{fontSize:'.62rem',color:'var(--hint)'}}, instOf(it.cfg.instrument).name))))
         : e('div',{style:{fontSize:'.85rem',color:'var(--hint)'}},'No finished instruments yet — keep playing!')
     ));

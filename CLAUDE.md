@@ -51,6 +51,9 @@ A complete, playable **treble + bass clef note-reading game** with modes, reward
   mini-preview via `stage.pv`. Finished instrument (full `cfg`) → `nq-shelf`; then a fresh build
   begins. `WorkshopModal` (choice + completion), `WorkshopSheet` (🔨 header: progress + shelf).
   State in `nq-build`(`{step,prog,cfg}`)/`nq-shelf`(`[{cfg}]`). ~29 correct per instrument.
+  Finished/in-progress instruments are **playable** — `PlayableInstrument` taps `playInstrument(cfg)`
+  to strum a C-major chord with per-instrument timbre (`TIMBRE`: guitar pluck / banjo bright / violin
+  bowed) + an `nq-strum` wiggle.
 - **IAP** (`IAP` object): RevenueCat entitlement `pro`, product `pro_unlock`. Native path uses
   the Capacitor plugin (`window.Purchases`, key `window.__RC_KEY__`); web/PWA falls back to a local
   unlock (`nq-pro`) so it's testable on Pages. `UpgradeSheet` does purchase + restore. No dev toggle.
