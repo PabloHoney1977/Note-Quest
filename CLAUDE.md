@@ -43,11 +43,14 @@ A complete, playable **treble + bass clef note-reading game** with modes, reward
 - **Sharps/flats** (`nq-acc`, Pro): opt-in toggle. `pick()` attaches a sensible ♯/♭ (~45% of eligible
   notes, skipping E♯/B♯/C♭/F♭); `Staff` draws the accidental glyph; answer needs a ♮/♯/♭ pick
   (`selAcc`) + the letter; audio shifts a semitone.
-- **Instrument Workshop** (free retention hook): correct answers accumulate (`BUILD_STAGES`,
-  cumulative — streak-independent) toward building a layered-SVG `Instrument` (guitar/violin/banjo).
-  Stages: pick instrument → cut body + pick material (wood/brass/cherry/sky) → neck → sound hole →
-  strings = finished → `nq-shelf`. `WorkshopModal` (choice/reveal), `WorkshopSheet` (🔨 header
-  button: progress + shelf). State in `nq-build`/`nq-shelf`. ~24 correct per instrument.
+- **Instrument Workshop** (free retention hook): correct answers accumulate (cumulative,
+  streak-independent) toward `BUILD_STAGES` — and **every stage is a customization choice** baked
+  into an accumulating `cfg`: instrument (guitar/violin/banjo) → body shape (classic/slim/chunky) →
+  color (6 finishes) → sound hole (round/f/star/heart) → strings (silver/gold/rainbow) → sticker
+  decal. `Instrument` renders `cfg` as layered SVG (shape = scaleX); each choice option shows a live
+  mini-preview via `stage.pv`. Finished instrument (full `cfg`) → `nq-shelf`; then a fresh build
+  begins. `WorkshopModal` (choice + completion), `WorkshopSheet` (🔨 header: progress + shelf).
+  State in `nq-build`(`{step,prog,cfg}`)/`nq-shelf`(`[{cfg}]`). ~29 correct per instrument.
 - **IAP** (`IAP` object): RevenueCat entitlement `pro`, product `pro_unlock`. Native path uses
   the Capacitor plugin (`window.Purchases`, key `window.__RC_KEY__`); web/PWA falls back to a local
   unlock (`nq-pro`) so it's testable on Pages. `UpgradeSheet` does purchase + restore. No dev toggle.

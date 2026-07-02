@@ -241,128 +241,143 @@ function Results({ card, reason, score, correct, answered, runBest, best, sticke
 
 /* ── Instrument Workshop ──
  * A persistent crafting/collection loop layered on the game (free, kid retention hook).
- * Correct answers accumulate toward build stages; finished instruments go on a shelf. */
+ * Correct answers accumulate toward stages; every stage is a customization CHOICE that gets
+ * baked into `cfg`. A finished instrument (full cfg) goes on the shelf; a fresh build begins. */
 const MATERIALS = [
   { key:'wood',   name:'Wood',   body:'#C8843C', edge:'#8A5A24', accent:'#E0A868' },
   { key:'brass',  name:'Brass',  body:'#E3B23C', edge:'#9C7A18', accent:'#FFE08A' },
   { key:'cherry', name:'Cherry', body:'#E23B3B', edge:'#A11F1F', accent:'#FF7A7A' },
   { key:'sky',    name:'Sky',    body:'#3BA0E2', edge:'#1E6DA6', accent:'#8AD1FF' },
+  { key:'mint',   name:'Mint',   body:'#2FBF9E', edge:'#1C7D68', accent:'#8FE9D6' },
+  { key:'grape',  name:'Grape',  body:'#8E5BE0', edge:'#5C34A6', accent:'#C6A6F5' },
 ];
 const WS_INSTRUMENTS = [
   { key:'guitar', name:'Guitar', emoji:'🎸' },
   { key:'violin', name:'Violin', emoji:'🎻' },
   { key:'banjo',  name:'Banjo',  emoji:'🪕' },
 ];
-// build stages in order; `cost` = correct answers needed to unlock, `choose` = a player choice.
+const UNFINISHED = { body:'#D9C7A3', edge:'#A38A5E', accent:'#EFE3C8' };   // raw body before it's painted
+const STRING_COLORS = { silver:'#f4f4f4', gold:'#E3B23C', rainbow:['#FF5C5C','#FFC93C','#4ED17F','#5AA9FF'] };
+const DECAL_EMOJI = { star:'⭐', bolt:'⚡', note:'🎵' };
+const GUITAR_PATH = 'M80 150 C 52 150 44 178 52 196 C 38 206 36 236 54 258 C 66 272 94 272 106 258 C 124 236 122 206 108 196 C 116 178 108 150 80 150 Z';
+const VIOLIN_PATH = 'M80 150 C 55 150 48 176 54 190 C 40 196 40 214 52 222 C 42 232 44 258 66 268 C 74 273 86 273 94 268 C 116 258 118 232 108 222 C 120 214 120 196 106 190 C 112 176 105 150 80 150 Z';
+const HEART_PATH  = 'M80 214 C 74 206 62 208 62 218 C 62 226 74 232 80 238 C 86 232 98 226 98 218 C 98 208 86 206 80 214 Z';
+const starPath = (cx,cy,ro,ri) => { let d=''; for (let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, r=i%2?ri:ro; d+=(i?'L':'M')+(cx+r*Math.cos(a)).toFixed(1)+' '+(cy+r*Math.sin(a)).toFixed(1)+' '; } return d+'Z'; };
+
+// Every stage is a choice; `cost` = correct answers to unlock; `pv` builds a preview cfg per option.
 const BUILD_STAGES = [
-  { key:'pick',    cost:5, choose:'instrument', title:'Pick an instrument to build' },
-  { key:'body',    cost:4, choose:'material',   title:'Cut & shape the body' },
-  { key:'neck',    cost:4, title:'Attach the neck' },
-  { key:'hole',    cost:5, title:'Cut the sound hole' },
-  { key:'strings', cost:6, title:'String it up!' },
+  { key:'instrument', cost:5, title:'Pick your instrument', prompt:'Which one will you build?',
+    options:[{v:'guitar',l:'Guitar'},{v:'violin',l:'Violin'},{v:'banjo',l:'Banjo'}],
+    pv:(cfg,v)=>({ instrument:v, shape:'classic', color:'wood', hole:v==='violin'?'f':'round', strings:'silver' }) },
+  { key:'shape', cost:4, title:'Choose a body shape', prompt:'Cut the body:',
+    options:[{v:'classic',l:'Classic'},{v:'slim',l:'Slim'},{v:'wide',l:'Chunky'}],
+    pv:(cfg,v)=>({ ...cfg, shape:v, color:cfg.color||'wood' }) },
+  { key:'color', cost:4, title:'Paint it', prompt:'Pick a finish:',
+    options:MATERIALS.map(m=>({v:m.key,l:m.name})), grid:3, pv:(cfg,v)=>({ ...cfg, color:v }) },
+  { key:'hole', cost:5, title:'Cut the sound hole', prompt:'Choose a shape:',
+    options:[{v:'round',l:'Round'},{v:'f',l:'f-holes'},{v:'star',l:'Star'},{v:'heart',l:'Heart'}], grid:4, pv:(cfg,v)=>({ ...cfg, hole:v }) },
+  { key:'strings', cost:5, title:'String it up', prompt:'Pick your strings:',
+    options:[{v:'silver',l:'Silver'},{v:'gold',l:'Gold'},{v:'rainbow',l:'Rainbow'}], pv:(cfg,v)=>({ ...cfg, strings:v }) },
+  { key:'decal', cost:6, title:'Add a sticker', prompt:'Finish with a decal:',
+    options:[{v:'none',l:'None'},{v:'star',l:'⭐'},{v:'bolt',l:'⚡'},{v:'note',l:'🎵'}], grid:4, pv:(cfg,v)=>({ ...cfg, decal:v }) },
 ];
-const freshBuild = () => ({ instrument:null, material:'wood', step:0, prog:0 });
+const freshBuild = () => ({ step:0, prog:0, cfg:{} });
 const matOf  = (k) => MATERIALS.find(m => m.key===k) || MATERIALS[0];
 const instOf = (k) => WS_INSTRUMENTS.find(i => i.key===k) || WS_INSTRUMENTS[0];
 const NECK_C = '#6B4A2A', NECK_E = '#4A3016', HEAD_C = '#7C4DFF';
 
-/* Layered SVG instrument. level: 0 outline · 1 body · 2 +neck · 3 +hole · 4 +strings (done). */
-function Instrument({ kind, mat, level, size }){
-  const w = size || 130, h = w * 300/160, m = matOf(mat), p = [];
-  if (level >= 2){                                    // neck + headstock (drawn first, body overlaps its base)
+/* Layered SVG instrument driven by an accumulating `cfg` (each key set by a workshop choice). */
+function Instrument({ cfg, size }){
+  const c = cfg || {}, kind = c.instrument || 'guitar', hasBody = !!c.shape;
+  const m = c.color ? matOf(c.color) : UNFINISHED;
+  const sx = c.shape==='slim' ? 0.82 : c.shape==='wide' ? 1.18 : 1;
+  const w = size || 130, h = w * 300/160, p = [];
+  if (hasBody){                                       // neck + headstock (body overlaps its base)
     p.push(e('rect',{ key:'hs', x:63, y:20, width:34, height:34, rx:6, fill:HEAD_C, stroke:'#5a2fd0', strokeWidth:2 }));
     [28,40].forEach((py,i)=>p.push(
       e('circle',{ key:'pl'+i, cx:58, cy:py, r:3.4, fill:'#eee' }),
       e('circle',{ key:'pr'+i, cx:102, cy:py, r:3.4, fill:'#eee' })));
     p.push(e('rect',{ key:'neck', x:70, y:44, width:20, height:112, fill:NECK_C, stroke:NECK_E, strokeWidth:2 }));
     for (let fy=64, i=0; fy<150; fy+=16, i++) p.push(e('line',{ key:'fr'+i, x1:70, y1:fy, x2:90, y2:fy, stroke:NECK_E, strokeWidth:1.5 }));
+    // body (horizontally scaled for shape, about center x=80)
+    const bodyKids = kind==='banjo'
+      ? [ e('circle',{ key:'b',  cx:80, cy:222, r:54, fill:m.body, stroke:m.edge, strokeWidth:4 }),
+          e('circle',{ key:'bh', cx:80, cy:222, r:40, fill:'#F4ECD8', stroke:m.edge, strokeWidth:2 }) ]
+      : [ e('path',{ key:'b', d: kind==='violin'?VIOLIN_PATH:GUITAR_PATH, fill:m.body, stroke:m.edge, strokeWidth:3.5 }) ];
+    p.push(e('g',{ key:'body', transform:`translate(80,0) scale(${sx},1) translate(-80,0)` }, bodyKids));
+  } else if (c.instrument){                           // chosen but not yet shaped → dashed outline
+    p.push(kind==='banjo'
+      ? e('circle',{ key:'ph', cx:80, cy:222, r:54, fill:'none', stroke:'var(--border)', strokeWidth:3, strokeDasharray:'6 6' })
+      : e('path',{ key:'ph', d: kind==='violin'?VIOLIN_PATH:GUITAR_PATH, fill:'none', stroke:'var(--border)', strokeWidth:3, strokeDasharray:'6 6' }));
   }
-  if (level >= 1){                                    // body
-    if (kind==='banjo'){
-      p.push(e('circle',{ key:'b', cx:80, cy:222, r:54, fill:m.body, stroke:m.edge, strokeWidth:4 }));
-      p.push(e('circle',{ key:'bh', cx:80, cy:222, r:40, fill:'#F4ECD8', stroke:m.edge, strokeWidth:2 }));
-    } else if (kind==='violin'){
-      p.push(e('path',{ key:'b', d:'M80 150 C 55 150 48 176 54 190 C 40 196 40 214 52 222 C 42 232 44 258 66 268 C 74 273 86 273 94 268 C 116 258 118 232 108 222 C 120 214 120 196 106 190 C 112 176 105 150 80 150 Z', fill:m.body, stroke:m.edge, strokeWidth:3.5 }));
-    } else {
-      p.push(e('path',{ key:'b', d:'M80 150 C 52 150 44 178 52 196 C 38 206 36 236 54 258 C 66 272 94 272 106 258 C 124 236 122 206 108 196 C 116 178 108 150 80 150 Z', fill:m.body, stroke:m.edge, strokeWidth:3.5 }));
-    }
+  if (c.hole && hasBody){                             // sound hole style (centered on x=80, scale-invariant)
+    if (c.hole==='f') ['M64 206 q -5 6 0 12 q 5 6 0 12','M96 206 q -5 6 0 12 q 5 6 0 12'].forEach((d,i)=>
+      p.push(e('path',{ key:'f'+i, d, fill:'none', stroke:m.edge, strokeWidth:3, strokeLinecap:'round' })));
+    else if (c.hole==='star')  p.push(e('path',{ key:'h', d:starPath(80,221,15,6), fill:'#231a12', stroke:m.accent, strokeWidth:1.5 }));
+    else if (c.hole==='heart') p.push(e('path',{ key:'h', d:HEART_PATH, fill:'#231a12', stroke:m.accent, strokeWidth:1.5 }));
+    else p.push(e('circle',{ key:'h', cx:80, cy:221, r:14, fill:'#231a12' }), e('circle',{ key:'hr', cx:80, cy:221, r:14, fill:'none', stroke:m.accent, strokeWidth:2 }));
   }
-  if (level >= 3){                                    // sound hole(s)
-    if (kind==='violin'){
-      ['M64 206 q -5 6 0 12 q 5 6 0 12','M96 206 q -5 6 0 12 q 5 6 0 12'].forEach((d,i)=>
-        p.push(e('path',{ key:'f'+i, d, fill:'none', stroke:m.edge, strokeWidth:3, strokeLinecap:'round' })));
-    } else {
-      p.push(e('circle',{ key:'h', cx:80, cy:221, r:14, fill:'#231a12' }),
-             e('circle',{ key:'hr', cx:80, cy:221, r:14, fill:'none', stroke:m.accent, strokeWidth:2 }));
-    }
-  }
-  if (level >= 4){                                    // strings + bridge
+  if (c.strings && hasBody){                          // strings + bridge
     p.push(e('rect',{ key:'br', x:66, y:248, width:28, height:6, rx:2, fill:NECK_E }));
-    [72,77,83,88].forEach((sx,i)=>p.push(e('line',{ key:'s'+i, x1:sx, y1:30, x2:sx, y2:248, stroke:'#f4f4f4', strokeWidth:1, opacity:0.9 })));
+    const col = STRING_COLORS[c.strings] || STRING_COLORS.silver;
+    [72,77,83,88].forEach((x,i)=>p.push(e('line',{ key:'s'+i, x1:x, y1:30, x2:x, y2:248,
+      stroke: Array.isArray(col)?col[i]:col, strokeWidth:1.3, opacity:0.95 })));
   }
-  if (level < 1)                                      // not-yet-built placeholder
-    p.push(e('path',{ key:'ph', d:'M80 150 C 52 150 44 178 52 196 C 38 206 36 236 54 258 C 66 272 94 272 106 258 C 124 236 122 206 108 196 C 116 178 108 150 80 150 Z', fill:'none', stroke:'var(--border)', strokeWidth:3, strokeDasharray:'6 6' }));
+  if (c.decal && c.decal!=='none' && hasBody)
+    p.push(e('text',{ key:'dc', x:112, y:206, fontSize:20, textAnchor:'middle' }, DECAL_EMOJI[c.decal] || ''));
   return e('svg',{ viewBox:'0 0 160 300', width:w, height:h, style:{ display:'block', margin:'0 auto' } }, p);
 }
 
-/* Full-screen modal shown when a build stage unlocks — a choice, a part reveal, or completion. */
-function WorkshopModal({ ws, build, onInstrument, onMaterial, onClose }){
+/* Full-screen modal: a per-stage customization choice, or the completion celebration. */
+function WorkshopModal({ ws, build, onChoose, onClose }){
   const overlay = { position:'fixed', inset:0, background:'rgba(20,10,40,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:60, padding:20 };
-  const card = { width:'100%', maxWidth:420, background:'var(--bg2)', borderRadius:20, padding:'22px 20px', border:'1px solid var(--border)', textAlign:'center' };
-  if (ws.mode==='choice' && ws.kind==='instrument')
+  const card = { width:'100%', maxWidth:430, background:'var(--bg2)', borderRadius:20, padding:'22px 20px', border:'1px solid var(--border)', textAlign:'center', maxHeight:'90vh', overflowY:'auto' };
+  if (ws.mode==='done'){
+    const it = instOf(ws.finished.cfg.instrument);
     return e('div',{style:overlay}, e('div',{style:card},
-      e('div',{style:{fontSize:'1.6rem'}},'🔨'),
-      e('div',{style:{fontSize:'1.2rem',fontWeight:900,margin:'4px 0'}},'Workshop unlocked!'),
-      e('div',{style:{color:'var(--hint)',fontSize:'.9rem',marginBottom:16}},'Pick an instrument to build:'),
-      e('div',{style:{display:'flex',gap:10,justifyContent:'center'}},
-        WS_INSTRUMENTS.map(it=>e('button',{ key:it.key, onClick:()=>onInstrument(it.key),
-          style:{ flex:1, padding:'14px 6px', borderRadius:14, cursor:'pointer', background:'var(--bg)', border:'1px solid var(--border)', color:'var(--txt)', fontWeight:800 } },
-          e('div',{style:{fontSize:'2rem'}},it.emoji), e('div',{style:{fontSize:'.8rem',marginTop:4}},it.name))))
+      e('div',{style:{fontSize:'1.2rem',fontWeight:900,marginBottom:8}}, 'You built a '+it.name+'! 🎉'),
+      e(Instrument,{ cfg:ws.finished.cfg, size:150 }),
+      e('div',{style:{color:'var(--hint)',fontSize:'.85rem',marginTop:8}},'It’s on your shelf. A new build starts as you keep going!'),
+      e('button',{ onClick:onClose, style:{ width:'100%', marginTop:14, padding:14, borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1rem', background:'var(--accent)', border:'none', color:'#fff' } }, 'Awesome!')
     ));
-  if (ws.mode==='choice' && ws.kind==='material')
-    return e('div',{style:overlay}, e('div',{style:card},
-      e('div',{style:{fontSize:'1.2rem',fontWeight:900,marginBottom:2}},'Cut the body'),
-      e('div',{style:{color:'var(--hint)',fontSize:'.9rem',marginBottom:14}},'What should it be made of?'),
-      e('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}},
-        MATERIALS.map(mt=>e('button',{ key:mt.key, onClick:()=>onMaterial(mt.key),
-          style:{ padding:'8px 2px', borderRadius:12, cursor:'pointer', background:'var(--bg)', border:'1px solid var(--border)', color:'var(--txt)', fontWeight:700, fontSize:'.72rem' } },
-          e(Instrument,{ kind:build.instrument, mat:mt.key, level:1, size:56 }), e('div',{style:{marginTop:2}},mt.name))))
-    ));
-  // reveal / completion
-  const done = ws.done, it = instOf(done ? ws.finished.instrument : ws.kind);
-  const mat = done ? ws.finished.material : ws.mat, level = done ? 4 : ws.level;
+  }
+  const stage = ws.stage, first = stage.key==='instrument', cols = stage.grid || stage.options.length;
   return e('div',{style:overlay}, e('div',{style:card},
-    e('div',{style:{fontSize:'1.15rem',fontWeight:900,marginBottom:8}}, done ? ('You built a '+it.name+'! 🎉') : (ws.stage.title+' ✓')),
-    e(Instrument,{ kind:it.key, mat, level, size:150 }),
-    done ? e('div',{style:{color:'var(--hint)',fontSize:'.85rem',marginTop:8}},'Added to your shelf. A new build starts as you keep going!') : null,
-    e('button',{ onClick:onClose, style:{ width:'100%', marginTop:14, padding:14, borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1rem', background:'var(--accent)', border:'none', color:'#fff' } }, done?'Awesome!':'Keep playing ▶')
+    first ? e('div',{style:{fontSize:'1.6rem'}},'🔨') : null,
+    e('div',{style:{fontSize:'1.2rem',fontWeight:900,margin:'2px 0'}}, first ? 'Workshop unlocked!' : stage.title),
+    e('div',{style:{color:'var(--hint)',fontSize:'.9rem',marginBottom:14}}, stage.prompt),
+    e('div',{style:{display:'grid',gridTemplateColumns:`repeat(${cols},1fr)`,gap:8}},
+      stage.options.map(opt => e('button',{ key:opt.v, onClick:()=>onChoose(stage.key, opt.v),
+        style:{ padding:'8px 4px', borderRadius:12, cursor:'pointer', background:'var(--bg)', border:'1px solid var(--border)', color:'var(--txt)', fontWeight:800, fontSize:'.74rem' } },
+        e(Instrument,{ cfg:stage.pv(build.cfg, opt.v), size: cols>=4?52:64 }),
+        e('div',{style:{marginTop:2}}, opt.l))))
   ));
 }
 
-/* Bottom sheet (opened from the header hammer) — current build progress + finished-instrument shelf. */
+/* Bottom sheet (header hammer) — current build progress + finished-instrument shelf. */
 function WorkshopSheet({ build, shelf, onClose }){
   const stage = build.step < BUILD_STAGES.length ? BUILD_STAGES[build.step] : null;
-  const level = Math.max(0, Math.min(4, build.step - 1));
+  const started = build.cfg && build.cfg.instrument;
   return e('div',{ onClick:onClose, style:{ position:'fixed', inset:0, background:'rgba(20,10,40,.55)', display:'flex', alignItems:'flex-end', zIndex:55 } },
     e('div',{ onClick:ev=>ev.stopPropagation(), style:{ width:'100%', maxWidth:560, margin:'0 auto', background:'var(--bg2)', borderRadius:'20px 20px 0 0', padding:'20px 20px 28px', border:'1px solid var(--border)', maxHeight:'82vh', overflowY:'auto' } },
       e('div',{style:{width:42,height:5,borderRadius:3,background:'var(--border)',margin:'0 auto 14px'}}),
       e('div',{style:{fontSize:'1.15rem',fontWeight:900,marginBottom:12}},'Instrument Workshop 🔨'),
-      build.instrument
+      started
         ? e('div',{style:{display:'flex',gap:14,alignItems:'center',marginBottom:18}},
-            e(Instrument,{ kind:build.instrument, mat:build.material, level, size:90 }),
+            e(Instrument,{ cfg:build.cfg, size:90 }),
             e('div',{style:{flex:1,textAlign:'left'}},
-              e('div',{style:{fontWeight:800,marginBottom:4}}, instOf(build.instrument).name+' — in progress'),
+              e('div',{style:{fontWeight:800,marginBottom:4}}, instOf(build.cfg.instrument).name+' — in progress'),
               stage ? e('div',{style:{fontSize:'.8rem',color:'var(--hint)',marginBottom:8}}, 'Next: '+stage.title) : null,
               stage ? e('div',{style:{height:10,borderRadius:6,background:'var(--bg)',border:'1px solid var(--border)',overflow:'hidden'}},
                 e('div',{style:{height:'100%',width:Math.round(build.prog/stage.cost*100)+'%',background:'var(--accent)'}})) : null,
-              stage ? e('div',{style:{fontSize:'.72rem',color:'var(--hint)',marginTop:4}}, build.prog+' / '+stage.cost+' correct') : null))
+              stage ? e('div',{style:{fontSize:'.72rem',color:'var(--hint)',marginTop:4}}, build.prog+' / '+stage.cost+' correct to next part') : null))
         : e('div',{style:{fontSize:'.9rem',color:'var(--hint)',marginBottom:18}},'Answer notes correctly to start building — your first instrument unlocks at 5 right!'),
       e('div',{style:{fontSize:'.72rem',color:'var(--hint)',letterSpacing:'.06em',marginBottom:8}}, 'SHELF · '+shelf.length),
       shelf.length
         ? e('div',{style:{display:'flex',flexWrap:'wrap',gap:10}},
             shelf.map((it,i)=>e('div',{ key:i, style:{ width:70, textAlign:'center' } },
-              e(Instrument,{ kind:it.instrument, mat:it.material, level:4, size:64 }),
-              e('div',{style:{fontSize:'.62rem',color:'var(--hint)'}}, instOf(it.instrument).name))))
+              e(Instrument,{ cfg:it.cfg, size:64 }),
+              e('div',{style:{fontSize:'.62rem',color:'var(--hint)'}}, instOf(it.cfg.instrument).name))))
         : e('div',{style:{fontSize:'.85rem',color:'var(--hint)'}},'No finished instruments yet — keep playing!')
     ));
 }
@@ -386,8 +401,8 @@ function App(){
   const [stickers, setStickers] = React.useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('nq-stickers') || '[]')); } catch(_) { return new Set(); }
   });
-  const [build, setBuild] = React.useState(() => { try { return JSON.parse(localStorage.getItem('nq-build')) || freshBuild(); } catch(_) { return freshBuild(); } });
-  const [shelf, setShelf] = React.useState(() => { try { return JSON.parse(localStorage.getItem('nq-shelf')) || []; } catch(_) { return []; } });
+  const [build, setBuild] = React.useState(() => { try { const b = JSON.parse(localStorage.getItem('nq-build')); return (b && b.cfg) ? b : freshBuild(); } catch(_) { return freshBuild(); } });
+  const [shelf, setShelf] = React.useState(() => { try { const s = JSON.parse(localStorage.getItem('nq-shelf')); return Array.isArray(s) ? s.filter(x => x && x.cfg) : []; } catch(_) { return []; } });
   const [workshop, setWorkshop] = React.useState(null);   // active workshop modal, or null
   const [wsOpen, setWsOpen]     = React.useState(false);   // workshop sheet open
   const [score, setScore] = React.useState(0);
@@ -465,29 +480,26 @@ function App(){
     setTimeout(()=> setReward(null), 1400);
   };
 
-  // workshop: each correct answer advances the current build; unlocks open a modal
+  // workshop: each correct answer advances the current build; a reached stage opens a choice modal
   const advanceWorkshop = () => {
     if (build.step >= BUILD_STAGES.length) return;
     const stage = BUILD_STAGES[build.step];
     const prog = build.prog + 1;
     if (prog < stage.cost){ setBuild({ ...build, prog }); return; }
-    if (stage.choose){ setBuild({ ...build, prog:0 }); setWorkshop({ mode:'choice', kind:stage.choose, stage }); return; }
-    const nstep = build.step + 1;
-    if (nstep >= BUILD_STAGES.length){                 // last part → finished instrument
-      const finished = { instrument:build.instrument, material:build.material };
-      setShelf(s => [...s, finished]); setBuild(freshBuild());
-      setWorkshop({ mode:'reveal', done:true, finished }); track('instrument.built', finished);
-    } else {
-      setBuild({ ...build, prog:0, step:nstep });
-      setWorkshop({ mode:'reveal', stage, level:Math.max(0, nstep-1), kind:build.instrument, mat:build.material });
-      track('workshop.stage', { key:stage.key });
-    }
+    setBuild({ ...build, prog:0 });                    // unlocked — wait for the player's choice
+    setWorkshop({ mode:'choice', stage });
   };
-  const chooseInstrument = (key) => { setBuild(b => ({ ...b, instrument:key, step:1 })); setWorkshop(null); track('workshop.pick', { instrument:key }); };
-  const chooseMaterial   = (key) => {
-    setBuild(b => ({ ...b, material:key, step:2 }));
-    setWorkshop({ mode:'reveal', stage:BUILD_STAGES[1], level:1, kind:build.instrument, mat:key });
-    track('workshop.material', { material:key });
+  // apply a customization choice; last stage finishes the instrument onto the shelf
+  const chooseOption = (key, val) => {
+    const cfg = { ...build.cfg, [key]: val };
+    if (build.step >= BUILD_STAGES.length - 1){
+      const finished = { cfg };
+      setShelf(s => [...s, finished]); setBuild(freshBuild());
+      setWorkshop({ mode:'done', finished }); track('instrument.built', { instrument:cfg.instrument });
+    } else {
+      setBuild({ ...build, cfg, step: build.step + 1 });
+      setWorkshop(null); track('workshop.choose', { key, val });
+    }
   };
 
   const answer = (letter) => {
@@ -622,7 +634,7 @@ function App(){
         ),
 
     upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false) }) : null,
-    workshop ? e(WorkshopModal,{ ws:workshop, build, onInstrument:chooseInstrument, onMaterial:chooseMaterial, onClose:()=>setWorkshop(null) }) : null,
+    workshop ? e(WorkshopModal,{ ws:workshop, build, onChoose:chooseOption, onClose:()=>setWorkshop(null) }) : null,
     wsOpen ? e(WorkshopSheet,{ build, shelf, onClose:()=>setWsOpen(false) }) : null
   );
 }
