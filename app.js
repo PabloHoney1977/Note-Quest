@@ -239,6 +239,134 @@ function Results({ card, reason, score, correct, answered, runBest, best, sticke
   );
 }
 
+/* ── Instrument Workshop ──
+ * A persistent crafting/collection loop layered on the game (free, kid retention hook).
+ * Correct answers accumulate toward build stages; finished instruments go on a shelf. */
+const MATERIALS = [
+  { key:'wood',   name:'Wood',   body:'#C8843C', edge:'#8A5A24', accent:'#E0A868' },
+  { key:'brass',  name:'Brass',  body:'#E3B23C', edge:'#9C7A18', accent:'#FFE08A' },
+  { key:'cherry', name:'Cherry', body:'#E23B3B', edge:'#A11F1F', accent:'#FF7A7A' },
+  { key:'sky',    name:'Sky',    body:'#3BA0E2', edge:'#1E6DA6', accent:'#8AD1FF' },
+];
+const WS_INSTRUMENTS = [
+  { key:'guitar', name:'Guitar', emoji:'🎸' },
+  { key:'violin', name:'Violin', emoji:'🎻' },
+  { key:'banjo',  name:'Banjo',  emoji:'🪕' },
+];
+// build stages in order; `cost` = correct answers needed to unlock, `choose` = a player choice.
+const BUILD_STAGES = [
+  { key:'pick',    cost:5, choose:'instrument', title:'Pick an instrument to build' },
+  { key:'body',    cost:4, choose:'material',   title:'Cut & shape the body' },
+  { key:'neck',    cost:4, title:'Attach the neck' },
+  { key:'hole',    cost:5, title:'Cut the sound hole' },
+  { key:'strings', cost:6, title:'String it up!' },
+];
+const freshBuild = () => ({ instrument:null, material:'wood', step:0, prog:0 });
+const matOf  = (k) => MATERIALS.find(m => m.key===k) || MATERIALS[0];
+const instOf = (k) => WS_INSTRUMENTS.find(i => i.key===k) || WS_INSTRUMENTS[0];
+const NECK_C = '#6B4A2A', NECK_E = '#4A3016', HEAD_C = '#7C4DFF';
+
+/* Layered SVG instrument. level: 0 outline · 1 body · 2 +neck · 3 +hole · 4 +strings (done). */
+function Instrument({ kind, mat, level, size }){
+  const w = size || 130, h = w * 300/160, m = matOf(mat), p = [];
+  if (level >= 2){                                    // neck + headstock (drawn first, body overlaps its base)
+    p.push(e('rect',{ key:'hs', x:63, y:20, width:34, height:34, rx:6, fill:HEAD_C, stroke:'#5a2fd0', strokeWidth:2 }));
+    [28,40].forEach((py,i)=>p.push(
+      e('circle',{ key:'pl'+i, cx:58, cy:py, r:3.4, fill:'#eee' }),
+      e('circle',{ key:'pr'+i, cx:102, cy:py, r:3.4, fill:'#eee' })));
+    p.push(e('rect',{ key:'neck', x:70, y:44, width:20, height:112, fill:NECK_C, stroke:NECK_E, strokeWidth:2 }));
+    for (let fy=64, i=0; fy<150; fy+=16, i++) p.push(e('line',{ key:'fr'+i, x1:70, y1:fy, x2:90, y2:fy, stroke:NECK_E, strokeWidth:1.5 }));
+  }
+  if (level >= 1){                                    // body
+    if (kind==='banjo'){
+      p.push(e('circle',{ key:'b', cx:80, cy:222, r:54, fill:m.body, stroke:m.edge, strokeWidth:4 }));
+      p.push(e('circle',{ key:'bh', cx:80, cy:222, r:40, fill:'#F4ECD8', stroke:m.edge, strokeWidth:2 }));
+    } else if (kind==='violin'){
+      p.push(e('path',{ key:'b', d:'M80 150 C 55 150 48 176 54 190 C 40 196 40 214 52 222 C 42 232 44 258 66 268 C 74 273 86 273 94 268 C 116 258 118 232 108 222 C 120 214 120 196 106 190 C 112 176 105 150 80 150 Z', fill:m.body, stroke:m.edge, strokeWidth:3.5 }));
+    } else {
+      p.push(e('path',{ key:'b', d:'M80 150 C 52 150 44 178 52 196 C 38 206 36 236 54 258 C 66 272 94 272 106 258 C 124 236 122 206 108 196 C 116 178 108 150 80 150 Z', fill:m.body, stroke:m.edge, strokeWidth:3.5 }));
+    }
+  }
+  if (level >= 3){                                    // sound hole(s)
+    if (kind==='violin'){
+      ['M64 206 q -5 6 0 12 q 5 6 0 12','M96 206 q -5 6 0 12 q 5 6 0 12'].forEach((d,i)=>
+        p.push(e('path',{ key:'f'+i, d, fill:'none', stroke:m.edge, strokeWidth:3, strokeLinecap:'round' })));
+    } else {
+      p.push(e('circle',{ key:'h', cx:80, cy:221, r:14, fill:'#231a12' }),
+             e('circle',{ key:'hr', cx:80, cy:221, r:14, fill:'none', stroke:m.accent, strokeWidth:2 }));
+    }
+  }
+  if (level >= 4){                                    // strings + bridge
+    p.push(e('rect',{ key:'br', x:66, y:248, width:28, height:6, rx:2, fill:NECK_E }));
+    [72,77,83,88].forEach((sx,i)=>p.push(e('line',{ key:'s'+i, x1:sx, y1:30, x2:sx, y2:248, stroke:'#f4f4f4', strokeWidth:1, opacity:0.9 })));
+  }
+  if (level < 1)                                      // not-yet-built placeholder
+    p.push(e('path',{ key:'ph', d:'M80 150 C 52 150 44 178 52 196 C 38 206 36 236 54 258 C 66 272 94 272 106 258 C 124 236 122 206 108 196 C 116 178 108 150 80 150 Z', fill:'none', stroke:'var(--border)', strokeWidth:3, strokeDasharray:'6 6' }));
+  return e('svg',{ viewBox:'0 0 160 300', width:w, height:h, style:{ display:'block', margin:'0 auto' } }, p);
+}
+
+/* Full-screen modal shown when a build stage unlocks — a choice, a part reveal, or completion. */
+function WorkshopModal({ ws, build, onInstrument, onMaterial, onClose }){
+  const overlay = { position:'fixed', inset:0, background:'rgba(20,10,40,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:60, padding:20 };
+  const card = { width:'100%', maxWidth:420, background:'var(--bg2)', borderRadius:20, padding:'22px 20px', border:'1px solid var(--border)', textAlign:'center' };
+  if (ws.mode==='choice' && ws.kind==='instrument')
+    return e('div',{style:overlay}, e('div',{style:card},
+      e('div',{style:{fontSize:'1.6rem'}},'🔨'),
+      e('div',{style:{fontSize:'1.2rem',fontWeight:900,margin:'4px 0'}},'Workshop unlocked!'),
+      e('div',{style:{color:'var(--hint)',fontSize:'.9rem',marginBottom:16}},'Pick an instrument to build:'),
+      e('div',{style:{display:'flex',gap:10,justifyContent:'center'}},
+        WS_INSTRUMENTS.map(it=>e('button',{ key:it.key, onClick:()=>onInstrument(it.key),
+          style:{ flex:1, padding:'14px 6px', borderRadius:14, cursor:'pointer', background:'var(--bg)', border:'1px solid var(--border)', color:'var(--txt)', fontWeight:800 } },
+          e('div',{style:{fontSize:'2rem'}},it.emoji), e('div',{style:{fontSize:'.8rem',marginTop:4}},it.name))))
+    ));
+  if (ws.mode==='choice' && ws.kind==='material')
+    return e('div',{style:overlay}, e('div',{style:card},
+      e('div',{style:{fontSize:'1.2rem',fontWeight:900,marginBottom:2}},'Cut the body'),
+      e('div',{style:{color:'var(--hint)',fontSize:'.9rem',marginBottom:14}},'What should it be made of?'),
+      e('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}},
+        MATERIALS.map(mt=>e('button',{ key:mt.key, onClick:()=>onMaterial(mt.key),
+          style:{ padding:'8px 2px', borderRadius:12, cursor:'pointer', background:'var(--bg)', border:'1px solid var(--border)', color:'var(--txt)', fontWeight:700, fontSize:'.72rem' } },
+          e(Instrument,{ kind:build.instrument, mat:mt.key, level:1, size:56 }), e('div',{style:{marginTop:2}},mt.name))))
+    ));
+  // reveal / completion
+  const done = ws.done, it = instOf(done ? ws.finished.instrument : ws.kind);
+  const mat = done ? ws.finished.material : ws.mat, level = done ? 4 : ws.level;
+  return e('div',{style:overlay}, e('div',{style:card},
+    e('div',{style:{fontSize:'1.15rem',fontWeight:900,marginBottom:8}}, done ? ('You built a '+it.name+'! 🎉') : (ws.stage.title+' ✓')),
+    e(Instrument,{ kind:it.key, mat, level, size:150 }),
+    done ? e('div',{style:{color:'var(--hint)',fontSize:'.85rem',marginTop:8}},'Added to your shelf. A new build starts as you keep going!') : null,
+    e('button',{ onClick:onClose, style:{ width:'100%', marginTop:14, padding:14, borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1rem', background:'var(--accent)', border:'none', color:'#fff' } }, done?'Awesome!':'Keep playing ▶')
+  ));
+}
+
+/* Bottom sheet (opened from the header hammer) — current build progress + finished-instrument shelf. */
+function WorkshopSheet({ build, shelf, onClose }){
+  const stage = build.step < BUILD_STAGES.length ? BUILD_STAGES[build.step] : null;
+  const level = Math.max(0, Math.min(4, build.step - 1));
+  return e('div',{ onClick:onClose, style:{ position:'fixed', inset:0, background:'rgba(20,10,40,.55)', display:'flex', alignItems:'flex-end', zIndex:55 } },
+    e('div',{ onClick:ev=>ev.stopPropagation(), style:{ width:'100%', maxWidth:560, margin:'0 auto', background:'var(--bg2)', borderRadius:'20px 20px 0 0', padding:'20px 20px 28px', border:'1px solid var(--border)', maxHeight:'82vh', overflowY:'auto' } },
+      e('div',{style:{width:42,height:5,borderRadius:3,background:'var(--border)',margin:'0 auto 14px'}}),
+      e('div',{style:{fontSize:'1.15rem',fontWeight:900,marginBottom:12}},'Instrument Workshop 🔨'),
+      build.instrument
+        ? e('div',{style:{display:'flex',gap:14,alignItems:'center',marginBottom:18}},
+            e(Instrument,{ kind:build.instrument, mat:build.material, level, size:90 }),
+            e('div',{style:{flex:1,textAlign:'left'}},
+              e('div',{style:{fontWeight:800,marginBottom:4}}, instOf(build.instrument).name+' — in progress'),
+              stage ? e('div',{style:{fontSize:'.8rem',color:'var(--hint)',marginBottom:8}}, 'Next: '+stage.title) : null,
+              stage ? e('div',{style:{height:10,borderRadius:6,background:'var(--bg)',border:'1px solid var(--border)',overflow:'hidden'}},
+                e('div',{style:{height:'100%',width:Math.round(build.prog/stage.cost*100)+'%',background:'var(--accent)'}})) : null,
+              stage ? e('div',{style:{fontSize:'.72rem',color:'var(--hint)',marginTop:4}}, build.prog+' / '+stage.cost+' correct') : null))
+        : e('div',{style:{fontSize:'.9rem',color:'var(--hint)',marginBottom:18}},'Answer notes correctly to start building — your first instrument unlocks at 5 right!'),
+      e('div',{style:{fontSize:'.72rem',color:'var(--hint)',letterSpacing:'.06em',marginBottom:8}}, 'SHELF · '+shelf.length),
+      shelf.length
+        ? e('div',{style:{display:'flex',flexWrap:'wrap',gap:10}},
+            shelf.map((it,i)=>e('div',{ key:i, style:{ width:70, textAlign:'center' } },
+              e(Instrument,{ kind:it.instrument, mat:it.material, level:4, size:64 }),
+              e('div',{style:{fontSize:'.62rem',color:'var(--hint)'}}, instOf(it.instrument).name))))
+        : e('div',{style:{fontSize:'.85rem',color:'var(--hint)'}},'No finished instruments yet — keep playing!')
+    ));
+}
+
 const LETTERS = ['C','D','E','F','G','A','B'];
 const ACCIDENTALS = [['♮',0],['♯',1],['♭',-1]];
 const accSym  = (a) => a===1 ? '♯' : a===-1 ? '♭' : '';
@@ -258,6 +386,10 @@ function App(){
   const [stickers, setStickers] = React.useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('nq-stickers') || '[]')); } catch(_) { return new Set(); }
   });
+  const [build, setBuild] = React.useState(() => { try { return JSON.parse(localStorage.getItem('nq-build')) || freshBuild(); } catch(_) { return freshBuild(); } });
+  const [shelf, setShelf] = React.useState(() => { try { return JSON.parse(localStorage.getItem('nq-shelf')) || []; } catch(_) { return []; } });
+  const [workshop, setWorkshop] = React.useState(null);   // active workshop modal, or null
+  const [wsOpen, setWsOpen]     = React.useState(false);   // workshop sheet open
   const [score, setScore] = React.useState(0);
   const [streak,setStreak]= React.useState(0);
   const [answered,setAnswered] = React.useState(0);
@@ -295,6 +427,8 @@ function App(){
   React.useEffect(()=>{ localStorage.setItem('nq-clef',clefMode); },[clefMode]);
   React.useEffect(()=>{ localStorage.setItem('nq-mode',mode); },[mode]);
   React.useEffect(()=>{ localStorage.setItem('nq-acc', accidentals ? '1' : '0'); },[accidentals]);
+  React.useEffect(()=>{ localStorage.setItem('nq-build', JSON.stringify(build)); },[build]);
+  React.useEffect(()=>{ localStorage.setItem('nq-shelf', JSON.stringify(shelf)); },[shelf]);
   React.useEffect(()=>{ track('app.loaded'); },[]);
   // when the pool/accidentals change, serve a fresh question — without ending the run
   React.useEffect(()=>{ setFb(null); setSelAcc(0); setQ(pick()); },[pick]);
@@ -331,6 +465,31 @@ function App(){
     setTimeout(()=> setReward(null), 1400);
   };
 
+  // workshop: each correct answer advances the current build; unlocks open a modal
+  const advanceWorkshop = () => {
+    if (build.step >= BUILD_STAGES.length) return;
+    const stage = BUILD_STAGES[build.step];
+    const prog = build.prog + 1;
+    if (prog < stage.cost){ setBuild({ ...build, prog }); return; }
+    if (stage.choose){ setBuild({ ...build, prog:0 }); setWorkshop({ mode:'choice', kind:stage.choose, stage }); return; }
+    const nstep = build.step + 1;
+    if (nstep >= BUILD_STAGES.length){                 // last part → finished instrument
+      const finished = { instrument:build.instrument, material:build.material };
+      setShelf(s => [...s, finished]); setBuild(freshBuild());
+      setWorkshop({ mode:'reveal', done:true, finished }); track('instrument.built', finished);
+    } else {
+      setBuild({ ...build, prog:0, step:nstep });
+      setWorkshop({ mode:'reveal', stage, level:Math.max(0, nstep-1), kind:build.instrument, mat:build.material });
+      track('workshop.stage', { key:stage.key });
+    }
+  };
+  const chooseInstrument = (key) => { setBuild(b => ({ ...b, instrument:key, step:1 })); setWorkshop(null); track('workshop.pick', { instrument:key }); };
+  const chooseMaterial   = (key) => {
+    setBuild(b => ({ ...b, material:key, step:2 }));
+    setWorkshop({ mode:'reveal', stage:BUILD_STAGES[1], level:1, kind:build.instrument, mat:key });
+    track('workshop.material', { material:key });
+  };
+
   const answer = (letter) => {
     if (fb || phase!=='play') return;     // ignore taps during flash / results
     const ok = letter === note.l && selAcc === q.acc;   // letter and accidental must both match
@@ -344,6 +503,7 @@ function App(){
       setRunBest(b => Math.max(b, ns));
       if (ns > best){ setBest(ns); localStorage.setItem('nq-best', ns); }
       if (ns % 5 === 0) celebrate(ns);
+      advanceWorkshop();
     } else {
       setStreak(0);
       track('note.missed', { note: noteName(note, q.acc) + note.o, clef: q.clef });
@@ -387,6 +547,8 @@ function App(){
         : e('button',{ onClick:()=>{ setUpg(true); track('paywall.shown',{feature:'header'}); },
             style:{ padding:'5px 10px', borderRadius:20, cursor:'pointer', fontSize:'.72rem', fontWeight:800,
               border:'1px solid var(--accent)', background:'transparent', color:'var(--accent)' } }, 'Unlock ✦'),
+      e('button',{ onClick:()=>{ setWsOpen(true); track('workshop.opened'); }, title:'Instrument Workshop',
+        style:{ padding:'5px 9px', borderRadius:20, cursor:'pointer', fontSize:'.85rem', border:'1px solid var(--border)', background:'transparent', color:'var(--txt)' } }, '🔨'),
       e('button',{ onClick:()=>setTheme(theme==='light'?'dark':'light'),
         style:{ padding:'5px 9px', borderRadius:20, cursor:'pointer', fontSize:'.85rem', border:'1px solid var(--border)', background:'transparent', color:'var(--txt)' } },
         theme==='light'?'☾':'☀')
@@ -459,7 +621,9 @@ function App(){
             'Bass clef, game modes & more 🔒') : e('div',{style:{height:30}})
         ),
 
-    upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false) }) : null
+    upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false) }) : null,
+    workshop ? e(WorkshopModal,{ ws:workshop, build, onInstrument:chooseInstrument, onMaterial:chooseMaterial, onClose:()=>setWorkshop(null) }) : null,
+    wsOpen ? e(WorkshopSheet,{ build, shelf, onClose:()=>setWsOpen(false) }) : null
   );
 }
 
