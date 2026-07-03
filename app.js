@@ -80,6 +80,29 @@ function tone(midi){
   g.gain.exponentialRampToValueAtTime(0.0001,t+0.9);
   o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.9);
 }
+// per-instrument timbre for the "tap to play" strum
+const TIMBRE = {
+  guitar: { wave:'triangle', attack:0.006, decay:1.2, stagger:0.05,  gain:0.22, cutoff:2800 },
+  banjo:  { wave:'square',   attack:0.003, decay:0.65, stagger:0.04, gain:0.12, cutoff:3200 },
+  violin: { wave:'sawtooth', attack:0.09,  decay:1.7, stagger:0.0,   gain:0.10, cutoff:2200 },
+};
+// strum a cheerful major chord; timbre depends on the built instrument
+function playInstrument(cfg){
+  const c = ctx(); if (c.state==='suspended') c.resume();
+  const t = TIMBRE[(cfg && cfg.instrument)] || TIMBRE.guitar;
+  const t0 = c.currentTime;
+  [60,64,67,72].forEach((midi,i)=>{                    // C major: C4 E4 G4 C5
+    const start = t0 + i*t.stagger, end = start + t.attack + t.decay;
+    const o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter();
+    o.type = t.wave; o.frequency.value = 440 * Math.pow(2, (midi-69)/12);
+    lp.type = 'lowpass'; lp.frequency.value = t.cutoff; lp.Q.value = 0.7;
+    g.gain.setValueAtTime(0.0001, start);
+    g.gain.linearRampToValueAtTime(t.gain, start + t.attack);
+    g.gain.exponentialRampToValueAtTime(0.0001, end);
+    o.connect(lp); lp.connect(g); g.connect(c.destination);
+    o.start(start); o.stop(end + 0.05);
+  });
+}
 const track = (ev, props) => { try { window.posthog && window.posthog.capture(ev, props); } catch(_){} };
 
 /* ── In-app purchase (RevenueCat) ──
@@ -239,6 +262,158 @@ function Results({ card, reason, score, correct, answered, runBest, best, sticke
   );
 }
 
+/* ── Instrument Workshop ──
+ * A persistent crafting/collection loop layered on the game (free, kid retention hook).
+ * Correct answers accumulate toward stages; every stage is a customization CHOICE that gets
+ * baked into `cfg`. A finished instrument (full cfg) goes on the shelf; a fresh build begins. */
+const MATERIALS = [
+  { key:'wood',   name:'Wood',   body:'#C8843C', edge:'#8A5A24', accent:'#E0A868' },
+  { key:'brass',  name:'Brass',  body:'#E3B23C', edge:'#9C7A18', accent:'#FFE08A' },
+  { key:'cherry', name:'Cherry', body:'#E23B3B', edge:'#A11F1F', accent:'#FF7A7A' },
+  { key:'sky',    name:'Sky',    body:'#3BA0E2', edge:'#1E6DA6', accent:'#8AD1FF' },
+  { key:'mint',   name:'Mint',   body:'#2FBF9E', edge:'#1C7D68', accent:'#8FE9D6' },
+  { key:'grape',  name:'Grape',  body:'#8E5BE0', edge:'#5C34A6', accent:'#C6A6F5' },
+];
+const WS_INSTRUMENTS = [
+  { key:'guitar', name:'Guitar', emoji:'🎸' },
+  { key:'violin', name:'Violin', emoji:'🎻' },
+  { key:'banjo',  name:'Banjo',  emoji:'🪕' },
+];
+const UNFINISHED = { body:'#D9C7A3', edge:'#A38A5E', accent:'#EFE3C8' };   // raw body before it's painted
+const STRING_COLORS = { silver:'#f4f4f4', gold:'#E3B23C', rainbow:['#FF5C5C','#FFC93C','#4ED17F','#5AA9FF'] };
+const DECAL_EMOJI = { star:'⭐', bolt:'⚡', note:'🎵' };
+const GUITAR_PATH = 'M80 150 C 52 150 44 178 52 196 C 38 206 36 236 54 258 C 66 272 94 272 106 258 C 124 236 122 206 108 196 C 116 178 108 150 80 150 Z';
+const VIOLIN_PATH = 'M80 150 C 55 150 48 176 54 190 C 40 196 40 214 52 222 C 42 232 44 258 66 268 C 74 273 86 273 94 268 C 116 258 118 232 108 222 C 120 214 120 196 106 190 C 112 176 105 150 80 150 Z';
+const HEART_PATH  = 'M80 214 C 74 206 62 208 62 218 C 62 226 74 232 80 238 C 86 232 98 226 98 218 C 98 208 86 206 80 214 Z';
+const starPath = (cx,cy,ro,ri) => { let d=''; for (let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, r=i%2?ri:ro; d+=(i?'L':'M')+(cx+r*Math.cos(a)).toFixed(1)+' '+(cy+r*Math.sin(a)).toFixed(1)+' '; } return d+'Z'; };
+
+// Every stage is a choice; `cost` = correct answers to unlock; `pv` builds a preview cfg per option.
+const BUILD_STAGES = [
+  { key:'instrument', cost:5, title:'Pick your instrument', prompt:'Which one will you build?',
+    options:[{v:'guitar',l:'Guitar'},{v:'violin',l:'Violin'},{v:'banjo',l:'Banjo'}],
+    pv:(cfg,v)=>({ instrument:v, shape:'classic', color:'wood', hole:v==='violin'?'f':'round', strings:'silver' }) },
+  { key:'shape', cost:4, title:'Choose a body shape', prompt:'Cut the body:',
+    options:[{v:'classic',l:'Classic'},{v:'slim',l:'Slim'},{v:'wide',l:'Chunky'}],
+    pv:(cfg,v)=>({ ...cfg, shape:v, color:cfg.color||'wood' }) },
+  { key:'color', cost:4, title:'Paint it', prompt:'Pick a finish:',
+    options:MATERIALS.map(m=>({v:m.key,l:m.name})), grid:3, pv:(cfg,v)=>({ ...cfg, color:v }) },
+  { key:'hole', cost:5, title:'Cut the sound hole', prompt:'Choose a shape:',
+    options:[{v:'round',l:'Round'},{v:'f',l:'f-holes'},{v:'star',l:'Star'},{v:'heart',l:'Heart'}], grid:4, pv:(cfg,v)=>({ ...cfg, hole:v }) },
+  { key:'strings', cost:5, title:'String it up', prompt:'Pick your strings:',
+    options:[{v:'silver',l:'Silver'},{v:'gold',l:'Gold'},{v:'rainbow',l:'Rainbow'}], pv:(cfg,v)=>({ ...cfg, strings:v }) },
+  { key:'decal', cost:6, title:'Add a sticker', prompt:'Finish with a decal:',
+    options:[{v:'none',l:'None'},{v:'star',l:'⭐'},{v:'bolt',l:'⚡'},{v:'note',l:'🎵'}], grid:4, pv:(cfg,v)=>({ ...cfg, decal:v }) },
+];
+const freshBuild = () => ({ step:0, prog:0, cfg:{} });
+const matOf  = (k) => MATERIALS.find(m => m.key===k) || MATERIALS[0];
+const instOf = (k) => WS_INSTRUMENTS.find(i => i.key===k) || WS_INSTRUMENTS[0];
+const NECK_C = '#6B4A2A', NECK_E = '#4A3016', HEAD_C = '#7C4DFF';
+
+/* Layered SVG instrument driven by an accumulating `cfg` (each key set by a workshop choice). */
+function Instrument({ cfg, size }){
+  const c = cfg || {}, kind = c.instrument || 'guitar', hasBody = !!c.shape;
+  const m = c.color ? matOf(c.color) : UNFINISHED;
+  const sx = c.shape==='slim' ? 0.82 : c.shape==='wide' ? 1.18 : 1;
+  const w = size || 130, h = w * 300/160, p = [];
+  if (hasBody){                                       // neck + headstock (body overlaps its base)
+    p.push(e('rect',{ key:'hs', x:63, y:20, width:34, height:34, rx:6, fill:HEAD_C, stroke:'#5a2fd0', strokeWidth:2 }));
+    [28,40].forEach((py,i)=>p.push(
+      e('circle',{ key:'pl'+i, cx:58, cy:py, r:3.4, fill:'#eee' }),
+      e('circle',{ key:'pr'+i, cx:102, cy:py, r:3.4, fill:'#eee' })));
+    p.push(e('rect',{ key:'neck', x:70, y:44, width:20, height:112, fill:NECK_C, stroke:NECK_E, strokeWidth:2 }));
+    for (let fy=64, i=0; fy<150; fy+=16, i++) p.push(e('line',{ key:'fr'+i, x1:70, y1:fy, x2:90, y2:fy, stroke:NECK_E, strokeWidth:1.5 }));
+    // body (horizontally scaled for shape, about center x=80)
+    const bodyKids = kind==='banjo'
+      ? [ e('circle',{ key:'b',  cx:80, cy:222, r:54, fill:m.body, stroke:m.edge, strokeWidth:4 }),
+          e('circle',{ key:'bh', cx:80, cy:222, r:40, fill:'#F4ECD8', stroke:m.edge, strokeWidth:2 }) ]
+      : [ e('path',{ key:'b', d: kind==='violin'?VIOLIN_PATH:GUITAR_PATH, fill:m.body, stroke:m.edge, strokeWidth:3.5 }) ];
+    p.push(e('g',{ key:'body', transform:`translate(80,0) scale(${sx},1) translate(-80,0)` }, bodyKids));
+  } else if (c.instrument){                           // chosen but not yet shaped → dashed outline
+    p.push(kind==='banjo'
+      ? e('circle',{ key:'ph', cx:80, cy:222, r:54, fill:'none', stroke:'var(--border)', strokeWidth:3, strokeDasharray:'6 6' })
+      : e('path',{ key:'ph', d: kind==='violin'?VIOLIN_PATH:GUITAR_PATH, fill:'none', stroke:'var(--border)', strokeWidth:3, strokeDasharray:'6 6' }));
+  }
+  if (c.hole && hasBody){                             // sound hole style (centered on x=80, scale-invariant)
+    if (c.hole==='f') ['M64 206 q -5 6 0 12 q 5 6 0 12','M96 206 q -5 6 0 12 q 5 6 0 12'].forEach((d,i)=>
+      p.push(e('path',{ key:'f'+i, d, fill:'none', stroke:m.edge, strokeWidth:3, strokeLinecap:'round' })));
+    else if (c.hole==='star')  p.push(e('path',{ key:'h', d:starPath(80,221,15,6), fill:'#231a12', stroke:m.accent, strokeWidth:1.5 }));
+    else if (c.hole==='heart') p.push(e('path',{ key:'h', d:HEART_PATH, fill:'#231a12', stroke:m.accent, strokeWidth:1.5 }));
+    else p.push(e('circle',{ key:'h', cx:80, cy:221, r:14, fill:'#231a12' }), e('circle',{ key:'hr', cx:80, cy:221, r:14, fill:'none', stroke:m.accent, strokeWidth:2 }));
+  }
+  if (c.strings && hasBody){                          // strings + bridge
+    p.push(e('rect',{ key:'br', x:66, y:248, width:28, height:6, rx:2, fill:NECK_E }));
+    const col = STRING_COLORS[c.strings] || STRING_COLORS.silver;
+    [72,77,83,88].forEach((x,i)=>p.push(e('line',{ key:'s'+i, x1:x, y1:30, x2:x, y2:248,
+      stroke: Array.isArray(col)?col[i]:col, strokeWidth:1.3, opacity:0.95 })));
+  }
+  if (c.decal && c.decal!=='none' && hasBody)
+    p.push(e('text',{ key:'dc', x:112, y:206, fontSize:20, textAnchor:'middle' }, DECAL_EMOJI[c.decal] || ''));
+  return e('svg',{ viewBox:'0 0 160 300', width:w, height:h, style:{ display:'block', margin:'0 auto' } }, p);
+}
+
+/* A tappable instrument that strums (audio) and wiggles when played. */
+function PlayableInstrument({ cfg, size }){
+  const [buzz, setBuzz] = React.useState(0);
+  const play = () => { playInstrument(cfg); track('instrument.played', { instrument: cfg && cfg.instrument }); setBuzz(b => b+1); };
+  return e('div',{ onClick:play, title:'Tap to play', style:{ cursor:'pointer', display:'inline-block' } },
+    e('div',{ key:buzz, style:{ animation: buzz ? 'nq-strum .5s ease-out' : 'none', transformOrigin:'50% 20%' } },
+      e(Instrument,{ cfg, size })));
+}
+
+/* Full-screen modal: a per-stage customization choice, or the completion celebration. */
+function WorkshopModal({ ws, build, onChoose, onClose }){
+  const overlay = { position:'fixed', inset:0, background:'rgba(20,10,40,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:60, padding:20 };
+  const card = { width:'100%', maxWidth:430, background:'var(--bg2)', borderRadius:20, padding:'22px 20px', border:'1px solid var(--border)', textAlign:'center', maxHeight:'90vh', overflowY:'auto' };
+  if (ws.mode==='done'){
+    const it = instOf(ws.finished.cfg.instrument);
+    return e('div',{style:overlay}, e('div',{style:card},
+      e('div',{style:{fontSize:'1.2rem',fontWeight:900,marginBottom:8}}, 'You built a '+it.name+'! 🎉'),
+      e(PlayableInstrument,{ cfg:ws.finished.cfg, size:150 }),
+      e('div',{style:{color:'var(--hint)',fontSize:'.85rem',marginTop:8}},'🔊 Tap it to play! It’s on your shelf now — a new build starts as you keep going.'),
+      e('button',{ onClick:onClose, style:{ width:'100%', marginTop:14, padding:14, borderRadius:14, cursor:'pointer', fontWeight:800, fontSize:'1rem', background:'var(--accent)', border:'none', color:'#fff' } }, 'Awesome!')
+    ));
+  }
+  const stage = ws.stage, first = stage.key==='instrument', cols = stage.grid || stage.options.length;
+  return e('div',{style:overlay}, e('div',{style:card},
+    first ? e('div',{style:{fontSize:'1.6rem'}},'🔨') : null,
+    e('div',{style:{fontSize:'1.2rem',fontWeight:900,margin:'2px 0'}}, first ? 'Workshop unlocked!' : stage.title),
+    e('div',{style:{color:'var(--hint)',fontSize:'.9rem',marginBottom:14}}, stage.prompt),
+    e('div',{style:{display:'grid',gridTemplateColumns:`repeat(${cols},1fr)`,gap:8}},
+      stage.options.map(opt => e('button',{ key:opt.v, onClick:()=>onChoose(stage.key, opt.v),
+        style:{ padding:'8px 4px', borderRadius:12, cursor:'pointer', background:'var(--bg)', border:'1px solid var(--border)', color:'var(--txt)', fontWeight:800, fontSize:'.74rem' } },
+        e(Instrument,{ cfg:stage.pv(build.cfg, opt.v), size: cols>=4?52:64 }),
+        e('div',{style:{marginTop:2}}, opt.l))))
+  ));
+}
+
+/* Bottom sheet (header hammer) — current build progress + finished-instrument shelf. */
+function WorkshopSheet({ build, shelf, onClose }){
+  const stage = build.step < BUILD_STAGES.length ? BUILD_STAGES[build.step] : null;
+  const started = build.cfg && build.cfg.instrument;
+  return e('div',{ onClick:onClose, style:{ position:'fixed', inset:0, background:'rgba(20,10,40,.55)', display:'flex', alignItems:'flex-end', zIndex:55 } },
+    e('div',{ onClick:ev=>ev.stopPropagation(), style:{ width:'100%', maxWidth:560, margin:'0 auto', background:'var(--bg2)', borderRadius:'20px 20px 0 0', padding:'20px 20px 28px', border:'1px solid var(--border)', maxHeight:'82vh', overflowY:'auto' } },
+      e('div',{style:{width:42,height:5,borderRadius:3,background:'var(--border)',margin:'0 auto 14px'}}),
+      e('div',{style:{fontSize:'1.15rem',fontWeight:900,marginBottom:12}},'Instrument Workshop 🔨'),
+      started
+        ? e('div',{style:{display:'flex',gap:14,alignItems:'center',marginBottom:18}},
+            e(PlayableInstrument,{ cfg:build.cfg, size:90 }),
+            e('div',{style:{flex:1,textAlign:'left'}},
+              e('div',{style:{fontWeight:800,marginBottom:4}}, instOf(build.cfg.instrument).name+' — in progress'),
+              stage ? e('div',{style:{fontSize:'.8rem',color:'var(--hint)',marginBottom:8}}, 'Next: '+stage.title) : null,
+              stage ? e('div',{style:{height:10,borderRadius:6,background:'var(--bg)',border:'1px solid var(--border)',overflow:'hidden'}},
+                e('div',{style:{height:'100%',width:Math.round(build.prog/stage.cost*100)+'%',background:'var(--accent)'}})) : null,
+              stage ? e('div',{style:{fontSize:'.72rem',color:'var(--hint)',marginTop:4}}, build.prog+' / '+stage.cost+' correct to next part') : null))
+        : e('div',{style:{fontSize:'.9rem',color:'var(--hint)',marginBottom:18}},'Answer notes correctly to start building — your first instrument unlocks at 5 right!'),
+      e('div',{style:{fontSize:'.72rem',color:'var(--hint)',letterSpacing:'.06em',marginBottom:8}}, 'SHELF · '+shelf.length+(shelf.length?'  ·  🔊 tap to play':'')),
+      shelf.length
+        ? e('div',{style:{display:'flex',flexWrap:'wrap',gap:10}},
+            shelf.map((it,i)=>e('div',{ key:i, style:{ width:70, textAlign:'center' } },
+              e(PlayableInstrument,{ cfg:it.cfg, size:64 }),
+              e('div',{style:{fontSize:'.62rem',color:'var(--hint)'}}, instOf(it.cfg.instrument).name))))
+        : e('div',{style:{fontSize:'.85rem',color:'var(--hint)'}},'No finished instruments yet — keep playing!')
+    ));
+}
+
 const LETTERS = ['C','D','E','F','G','A','B'];
 const ACCIDENTALS = [['♮',0],['♯',1],['♭',-1]];
 const accSym  = (a) => a===1 ? '♯' : a===-1 ? '♭' : '';
@@ -258,6 +433,10 @@ function App(){
   const [stickers, setStickers] = React.useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem('nq-stickers') || '[]')); } catch(_) { return new Set(); }
   });
+  const [build, setBuild] = React.useState(() => { try { const b = JSON.parse(localStorage.getItem('nq-build')); return (b && b.cfg) ? b : freshBuild(); } catch(_) { return freshBuild(); } });
+  const [shelf, setShelf] = React.useState(() => { try { const s = JSON.parse(localStorage.getItem('nq-shelf')); return Array.isArray(s) ? s.filter(x => x && x.cfg) : []; } catch(_) { return []; } });
+  const [workshop, setWorkshop] = React.useState(null);   // active workshop modal, or null
+  const [wsOpen, setWsOpen]     = React.useState(false);   // workshop sheet open
   const [score, setScore] = React.useState(0);
   const [streak,setStreak]= React.useState(0);
   const [answered,setAnswered] = React.useState(0);
@@ -295,6 +474,8 @@ function App(){
   React.useEffect(()=>{ localStorage.setItem('nq-clef',clefMode); },[clefMode]);
   React.useEffect(()=>{ localStorage.setItem('nq-mode',mode); },[mode]);
   React.useEffect(()=>{ localStorage.setItem('nq-acc', accidentals ? '1' : '0'); },[accidentals]);
+  React.useEffect(()=>{ localStorage.setItem('nq-build', JSON.stringify(build)); },[build]);
+  React.useEffect(()=>{ localStorage.setItem('nq-shelf', JSON.stringify(shelf)); },[shelf]);
   React.useEffect(()=>{ track('app.loaded'); },[]);
   // when the pool/accidentals change, serve a fresh question — without ending the run
   React.useEffect(()=>{ setFb(null); setSelAcc(0); setQ(pick()); },[pick]);
@@ -331,6 +512,28 @@ function App(){
     setTimeout(()=> setReward(null), 1400);
   };
 
+  // workshop: each correct answer advances the current build; a reached stage opens a choice modal
+  const advanceWorkshop = () => {
+    if (build.step >= BUILD_STAGES.length) return;
+    const stage = BUILD_STAGES[build.step];
+    const prog = build.prog + 1;
+    if (prog < stage.cost){ setBuild({ ...build, prog }); return; }
+    setBuild({ ...build, prog:0 });                    // unlocked — wait for the player's choice
+    setWorkshop({ mode:'choice', stage });
+  };
+  // apply a customization choice; last stage finishes the instrument onto the shelf
+  const chooseOption = (key, val) => {
+    const cfg = { ...build.cfg, [key]: val };
+    if (build.step >= BUILD_STAGES.length - 1){
+      const finished = { cfg };
+      setShelf(s => [...s, finished]); setBuild(freshBuild());
+      setWorkshop({ mode:'done', finished }); track('instrument.built', { instrument:cfg.instrument });
+    } else {
+      setBuild({ ...build, cfg, step: build.step + 1 });
+      setWorkshop(null); track('workshop.choose', { key, val });
+    }
+  };
+
   const answer = (letter) => {
     if (fb || phase!=='play') return;     // ignore taps during flash / results
     const ok = letter === note.l && selAcc === q.acc;   // letter and accidental must both match
@@ -344,6 +547,7 @@ function App(){
       setRunBest(b => Math.max(b, ns));
       if (ns > best){ setBest(ns); localStorage.setItem('nq-best', ns); }
       if (ns % 5 === 0) celebrate(ns);
+      advanceWorkshop();
     } else {
       setStreak(0);
       track('note.missed', { note: noteName(note, q.acc) + note.o, clef: q.clef });
@@ -387,6 +591,8 @@ function App(){
         : e('button',{ onClick:()=>{ setUpg(true); track('paywall.shown',{feature:'header'}); },
             style:{ padding:'5px 10px', borderRadius:20, cursor:'pointer', fontSize:'.72rem', fontWeight:800,
               border:'1px solid var(--accent)', background:'transparent', color:'var(--accent)' } }, 'Unlock ✦'),
+      e('button',{ onClick:()=>{ setWsOpen(true); track('workshop.opened'); }, title:'Instrument Workshop',
+        style:{ padding:'5px 9px', borderRadius:20, cursor:'pointer', fontSize:'.85rem', border:'1px solid var(--border)', background:'transparent', color:'var(--txt)' } }, '🔨'),
       e('button',{ onClick:()=>setTheme(theme==='light'?'dark':'light'),
         style:{ padding:'5px 9px', borderRadius:20, cursor:'pointer', fontSize:'.85rem', border:'1px solid var(--border)', background:'transparent', color:'var(--txt)' } },
         theme==='light'?'☾':'☀')
@@ -459,7 +665,9 @@ function App(){
             'Bass clef, game modes & more 🔒') : e('div',{style:{height:30}})
         ),
 
-    upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false) }) : null
+    upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false) }) : null,
+    workshop ? e(WorkshopModal,{ ws:workshop, build, onChoose:chooseOption, onClose:()=>setWorkshop(null) }) : null,
+    wsOpen ? e(WorkshopSheet,{ build, shelf, onClose:()=>setWsOpen(false) }) : null
   );
 }
 
