@@ -1,5 +1,5 @@
 /* Note Quest service worker — cache-first offline shell. Bump CACHE on asset changes. */
-const CACHE = 'nq-v2';
+const CACHE = 'nq-v3';
 const ASSETS = ['./', './index.html', './app.js', './manifest.json'];
 
 self.addEventListener('install', (e) => {
