@@ -5,7 +5,7 @@ A fun, fast **music note-reading game** for kids and beginners — read the note
 **Why this app:** the discovery channel is uniquely organic — piano/music teachers recommend note-reading apps to their *entire studio* (see how "Note Rush" spread). That word-of-mouth beats paid acquisition, which is the ceiling on the other apps.
 
 ## Status
-🌱 **Starter scaffold.** A complete, playable treble-clef loop: random note on a real SVG staff, 7 answer buttons (C–B), score/streak/best with `localStorage` persistence, audio feedback, correct/wrong flash, dark/light theme, and the freemium gate (treble-staff notes free; ledger lines, middle C, bass clef & sharps behind Pro).
+🚀 **App Store candidate (v1.0.0).** Treble + bass clef, ledger notes, sharps/flats, Endless/Timed/Lives modes, stickers, Instrument Workshop, RevenueCat IAP, and a Kids-category parental gate. See [`STORE.md`](STORE.md) for the submission kit and remaining manual steps.
 
 ## Run locally
 No build step (service worker needs http, not `file://`):
@@ -16,7 +16,7 @@ python -m http.server 8000
 Live (GitHub Pages, served from `main`): https://pablohoney1977.github.io/Note-Quest/
 
 ## Stack
-Single-file React 18 PWA (CDN React, no bundler). All logic in `app.js` (`e()` = `React.createElement`). CSS theme vars in `index.html`. Capacitor iOS + Codemagic wired (see **Native iOS** below); only the native RevenueCat bridge is bundled (esbuild) — the web app stays build-free.
+Single-file React 18 PWA (React vendored in `vendor/`, no bundler). All logic in `app.js` (`e()` = `React.createElement`). CSS theme vars in `index.html`. Capacitor iOS + Codemagic wired (see **Native iOS** below); only the native RevenueCat bridge is bundled (esbuild) — the web app stays build-free.
 
 ## Roadmap (MVP → launch)
 - [x] Bass clef mode (Pro)

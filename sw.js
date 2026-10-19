@@ -1,6 +1,7 @@
 /* Note Quest service worker — cache-first offline shell. Bump CACHE on asset changes. */
-const CACHE = 'nq-v3';
-const ASSETS = ['./', './index.html', './app.js', './manifest.json'];
+const CACHE = 'nq-v4';
+const ASSETS = ['./', './index.html', './app.js', './manifest.json',
+  './vendor/react.production.min.js', './vendor/react-dom.production.min.js'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

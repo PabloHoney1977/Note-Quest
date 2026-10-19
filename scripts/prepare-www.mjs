@@ -9,10 +9,12 @@ rmSync(WWW, { recursive: true, force: true });
 mkdirSync(WWW, { recursive: true });
 
 for (const f of ['index.html', 'app.js', 'sw.js', 'manifest.json']) cpSync(f, `${WWW}/${f}`);
-if (existsSync('icons')) cpSync('icons', `${WWW}/icons`, { recursive: true });
+for (const d of ['icons', 'vendor']) if (existsSync(d)) cpSync(d, `${WWW}/${d}`, { recursive: true });
 
 // Bundle the native-only RevenueCat bridge. RC_IOS_KEY is embedded from the env (set in Codemagic).
 const key = process.env.RC_IOS_KEY || '';
+// A CI (release) build without the key would ship an app whose purchases can't work — fail loudly.
+if (!key && process.env.CI) { console.error('RC_IOS_KEY is not set — refusing to build a release without IAP.'); process.exit(1); }
 await build({
   entryPoints: ['native/rc-bridge.mjs'],
   bundle: true,

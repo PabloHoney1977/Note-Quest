@@ -3,6 +3,8 @@
 #   • Connect an App Store Connect API key as an integration named "CodemagicASC".
 #   • Create an environment group "revenuecat" with RC_IOS_KEY = your RevenueCat *public* iOS SDK key.
 #   • Register the bundle id com.musicappstudio.notequest in App Store Connect.
+#   • In App Store Connect, create the non-consumable IAP "pro_unlock" and attach it in RevenueCat
+#     (entitlement "pro", current offering) — the app reads its localized price from there.
 # The ios/ native project is generated on the fly (npx cap add ios) so it need not be committed.
 
 workflows:
@@ -30,6 +32,17 @@ workflows:
       - name: Add iOS platform if missing
         script: |
           if [ ! -d "ios/App" ]; then npx cap add ios; fi
+      - name: Configure Info.plist (export compliance, orientation, display name)
+        script: |
+          PLIST=ios/App/App/Info.plist
+          pb() { /usr/libexec/PlistBuddy -c "$1" "$PLIST" 2>/dev/null || true; }
+          # No custom encryption (HTTPS only) — skips the export-compliance prompt on every upload
+          pb "Delete :ITSAppUsesNonExemptEncryption"; pb "Add :ITSAppUsesNonExemptEncryption bool false"
+          pb "Set :CFBundleDisplayName Note Quest"
+          # iPhone: portrait only. iPad keeps all orientations (required for multitasking).
+          pb "Delete :UISupportedInterfaceOrientations"
+          pb "Add :UISupportedInterfaceOrientations array"
+          pb "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait"
       - name: Generate app icons & splash
         script: npm run assets || echo "skipping asset generation (no assets/ source)"
       - name: Capacitor sync (copy web assets + install CocoaPods)

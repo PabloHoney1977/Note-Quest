@@ -1,6 +1,6 @@
 {
   "name": "note-quest",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Note Quest — kids' music note-reading game (freemium iOS PWA)",
   "scripts": {
     "build": "node scripts/prepare-www.mjs",

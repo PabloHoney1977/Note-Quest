@@ -21,7 +21,7 @@ The "teacher outreach kit" on the roadmap is therefore a priority, not an aftert
 - **No Node locally** — `pip install nodejs-bin`, run via `python -c "import nodejs; nodejs.node.run([...])"`.
 
 ## Stack
-Single-file React 18 PWA. CDN React (unpkg UMD), no bundler. Everything inline in `app.js`
+Single-file React 18 PWA. React 18.2.0 UMD vendored in `vendor/` (no CDN — works offline/native), no bundler. Everything inline in `app.js`
 (`e()` = `React.createElement`). Two `:root` theme blocks in `index.html` (light default —
 kid-friendly — + `[data-theme="dark"]`). Capacitor iOS + Codemagic wired (native RevenueCat
 bridge bundled via esbuild; web app stays build-free — see the Capacitor scaffold below).
@@ -57,7 +57,13 @@ A complete, playable **treble + bass clef note-reading game** with modes, reward
 - **IAP** (`IAP` object): RevenueCat entitlement `pro`, product `pro_unlock`. Native path uses
   the Capacitor plugin (`window.Purchases`, key `window.__RC_KEY__`); web/PWA falls back to a local
   unlock (`nq-pro`) so it's testable on Pages. `UpgradeSheet` does purchase + restore. No dev toggle.
-- `PRICE` constant = single source of truth. `track()` PostHog helper (`app.loaded`, `paywall.shown`,
+- **App Store / Kids-category compliance:** `ParentalGate` (spelled-out multiplication + keypad) guards
+  purchase, restore and the external Privacy/Support links (`Footer`). `IS_NATIVE` → `track()` is a
+  no-op in the iOS app (Kids category bars third-party analytics) and `IAP` never takes the web
+  local-unlock path natively. Native price label comes from the store (`IAP.price`, localized).
+  `navigator.audioSession.type='playback'` so sound plays with the silent switch on.
+  Submission kit (listing copy, privacy label, review notes, manual steps): `STORE.md`.
+- `PRICE` constant = web fallback label only (native shows the store's localized price). `track()` PostHog helper (`app.loaded`, `paywall.shown`,
   `upgrade.completed`, `sticker.earned`, `run.ended`, `iap.*`). All localStorage keys `nq-` prefixed.
 
 ## To Port From Jazz Guitar Lab
@@ -83,5 +89,8 @@ the teacher channel. Research before launch. Update only the `PRICE` constant.
 5. ✅ Capacitor iOS scaffold: `capacitor.config.json` (webDir `www`), `scripts/prepare-www.mjs`
    (esbuild-bundles `native/rc-bridge.mjs` → `www/native.js`, sets `window.Purchases`+`__RC_KEY__`),
    `codemagic.yaml` (generates `ios/`, syncs, TestFlight), app icons. Run `npx cap add ios` in CI.
-6. **Teacher outreach kit** (printable + studio-license concept) — the growth lever.
-7. Pricing research → set `PRICE` (consider a studio/teacher bulk license).
+6. ✅ App Store readiness: parental gate, native-safe IAP + localized price, analytics off natively,
+   vendored React, Info.plist patches in `codemagic.yaml`, `STORE.md`. Remaining steps are manual —
+   see `STORE.md` → "Still to do by hand" (privacy policy covering kids is the big one).
+7. **Teacher outreach kit** (printable + studio-license concept) — the growth lever.
+8. Pricing research → set `PRICE` (consider a studio/teacher bulk license).

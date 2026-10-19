@@ -4,7 +4,9 @@
  * Treble + bass clef note-reading loop. See CLAUDE.md for roadmap. */
 const e = React.createElement;
 
-const PRICE = '$4.99'; // TBD — kids note-reading apps skew cheap. Single source of truth.
+const PRICE = '$4.99'; // TBD — kids note-reading apps skew cheap. Fallback only: the store's localized price wins.
+const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+const SITE = 'https://highlandmusicapps.com';   // Highland Music, LLC — shared support/privacy site
 
 /* ── Staff geometry ──
  * step 0 = bottom line (y=96). Each diatonic step up = -7px. Geometry is clef-independent;
@@ -70,7 +72,14 @@ const CONFETTI = ['🎉','⭐','🎵','✨','🎈','🌟'];
 
 /* ── Audio (simple bell/note) ── */
 let _actx;
-const ctx = () => (_actx = _actx || new (window.AudioContext || window.webkitAudioContext)());
+const ctx = () => {
+  if (!_actx){
+    // iOS: play through the ringer/silent switch (kids rarely know about it). Safari 16.4+/iOS 17+.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch(_){}
+    _actx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return _actx;
+};
 function tone(midi){
   const c = ctx(); if (c.state==='suspended') c.resume();
   const f = 440 * Math.pow(2, (midi - 69) / 12);
@@ -103,19 +112,22 @@ function playInstrument(cfg){
     o.start(start); o.stop(end + 0.05);
   });
 }
-const track = (ev, props) => { try { window.posthog && window.posthog.capture(ev, props); } catch(_){} };
+// Analytics are web-only: the iOS app ships in the Kids category, which bars third-party analytics.
+const track = (ev, props) => { if (IS_NATIVE) return; try { window.posthog && window.posthog.capture(ev, props); } catch(_){} };
 
 /* ── In-app purchase (RevenueCat) ──
  * Entitlement 'pro', product 'pro_unlock' (ported from Jazz Guitar Lab, nq- prefixes).
  * Native path uses the RevenueCat Capacitor plugin when present — the iOS build assigns it to
  * window.Purchases and sets window.__RC_KEY__. On the web/PWA build there's no store, so we fall
- * back to a local unlock flag (nq-pro) so the app stays fully testable on GitHub Pages. */
+ * back to a local unlock flag (nq-pro) so the app stays fully testable on GitHub Pages.
+ * The native app NEVER takes the local-unlock path: if the plugin is missing there, purchases fail. */
 const IAP = {
   ENTITLEMENT: 'pro',
   PRODUCT: 'pro_unlock',
   _cbs: new Set(),
   _pro: false,
   _rc: null,                                   // RevenueCat plugin, when running native
+  price: '',                                   // store's localized price string (e.g. "$4.99", "4,99 €")
 
   get isPro(){ return this._pro; },
   subscribe(cb){ this._cbs.add(cb); return () => this._cbs.delete(cb); },
@@ -138,20 +150,27 @@ const IAP = {
         this._set(this._entitled(customerInfo));
         if (this._rc.addCustomerInfoUpdateListener)
           this._rc.addCustomerInfoUpdateListener(ci => this._set(this._entitled(ci)));
+        const pkg = await this._package();
+        if (pkg && pkg.product && pkg.product.priceString){ this.price = pkg.product.priceString; this._emit(); }
       } catch(err){ track('iap.error', { where:'init', msg:String(err && err.message || err) }); }
     }
     return this._pro;
   },
 
+  async _package(){
+    const res = await this._rc.getOfferings();         // plugin returns the offerings object directly
+    const offerings = (res && res.offerings) ? res.offerings : res;
+    const pkgs = (offerings && offerings.current && offerings.current.availablePackages) || [];
+    return pkgs.find(p => p.product && p.product.identifier === this.PRODUCT) || pkgs[0] || null;
+  },
+
   async purchase(){
-    if (!this._rc){                              // web fallback — no store, unlock locally for testing
-      this._set(true); track('upgrade.completed', { via:'web' }); return { ok:true, web:true };
+    if (!this._rc){
+      if (IS_NATIVE) return { ok:false };      // store unavailable — never unlock for free in the app
+      this._set(true); track('upgrade.completed', { via:'web' }); return { ok:true, web:true };   // web fallback for testing
     }
     try {
-      const res = await this._rc.getOfferings();       // plugin returns the offerings object directly
-      const offerings = (res && res.offerings) ? res.offerings : res;
-      const pkgs = (offerings && offerings.current && offerings.current.availablePackages) || [];
-      const pkg = pkgs.find(p => p.product && p.product.identifier === this.PRODUCT) || pkgs[0];
+      const pkg = await this._package();
       let customerInfo;
       if (pkg) ({ customerInfo } = await this._rc.purchasePackage({ aPackage: pkg }));
       else     ({ customerInfo } = await this._rc.purchaseStoreProduct({ product:{ identifier:this.PRODUCT } }));
@@ -166,7 +185,10 @@ const IAP = {
   },
 
   async restore(){
-    if (!this._rc){ const ok = localStorage.getItem('nq-pro') === '1'; this._set(ok); return { ok }; }
+    if (!this._rc){
+      if (IS_NATIVE) return { ok:false };
+      const ok = localStorage.getItem('nq-pro') === '1'; this._set(ok); return { ok };
+    }
     try {
       const { customerInfo } = await this._rc.restorePurchases();
       const ok = this._entitled(customerInfo); this._set(ok);
@@ -205,10 +227,40 @@ function Staff({ clef, step, acc }){
   );
 }
 
-/* ── Upgrade sheet (RevenueCat purchase + restore) ── */
+/* ── Parental gate ──
+ * Apple Kids-category rule (1.3): purchases and links out of the app need an adult check.
+ * A spelled-out multiplication question, typed on a keypad — readable for grown-ups,
+ * not guessable by tapping around. */
+const NUM_WORDS = ['zero','one','two','three','four','five','six','seven','eight','nine'];
+function ParentalGate({ onPass, onCancel }){
+  const [q] = React.useState(() => { const a = 3 + ((Math.random()*7)|0), b = 3 + ((Math.random()*7)|0); return { a, b }; });
+  const [val, setVal] = React.useState('');
+  const [bad, setBad] = React.useState(false);
+  const submit = () => { if (+val === q.a*q.b) onPass(); else { setBad(true); setVal(''); } };
+  const key = (k) => { setBad(false); setVal(v => k==='⌫' ? v.slice(0,-1) : (v.length<3 ? v+k : v)); };
+  const kb = { padding:'14px 0', borderRadius:12, cursor:'pointer', fontWeight:800, fontSize:'1.15rem',
+    border:'1px solid var(--border)', background:'var(--bg2)', color:'var(--txt)' };
+  return e('div',{ onClick:ev=>{ ev.stopPropagation(); onCancel(); }, style:{ position:'fixed', inset:0, background:'rgba(20,10,40,.65)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:70, padding:16 } },
+    e('div',{ onClick:ev=>ev.stopPropagation(), style:{ width:'100%', maxWidth:340, background:'var(--bg2)', borderRadius:20, padding:'22px 18px', border:'1px solid var(--border)', textAlign:'center' } },
+      e('div',{style:{fontSize:'1.15rem',fontWeight:900,marginBottom:4}},'Grown-ups only 🔐'),
+      e('div',{style:{fontSize:'.9rem',color:'var(--hint)',marginBottom:12,lineHeight:1.45}},
+        'To continue, answer: what is ', e('b',{style:{color:'var(--txt)'}}, NUM_WORDS[q.a]+' times '+NUM_WORDS[q.b]), '?'),
+      e('div',{style:{fontSize:'1.7rem',fontWeight:900,minHeight:42,letterSpacing:'.08em',color: bad?'var(--bad)':'var(--txt)'}}, val || (bad ? 'Try again' : '·')),
+      e('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:6,margin:'10px 0 12px'}},
+        ['1','2','3','4','5','6','7','8','9','⌫','0','OK'].map(k => e('button',{ key:k,
+          onClick:()=> k==='OK' ? submit() : key(k),
+          style: k==='OK' ? { ...kb, background:'var(--accent)', color:'#fff', border:'none' } : kb }, k))),
+      e('button',{ onClick:onCancel, style:{ width:'100%', padding:10, borderRadius:12, cursor:'pointer', fontWeight:700, background:'transparent', border:'none', color:'var(--hint)' } }, 'Cancel')
+    )
+  );
+}
+
+/* ── Upgrade sheet (RevenueCat purchase + restore, behind the parental gate) ── */
 function UpgradeSheet({ onClose }){
   const [busy, setBusy] = React.useState('');   // '' | 'buy' | 'restore'
   const [msg, setMsg]   = React.useState('');
+  const [gate, setGate] = React.useState(null); // pending action awaiting the grown-up check
+  const price = IS_NATIVE ? IAP.price : PRICE;  // native shows the store's localized price only
   const run = async (kind, fn, failMsg) => {
     if (busy) return;
     setBusy(kind); setMsg('');
@@ -224,14 +276,27 @@ function UpgradeSheet({ onClose }){
       e('div',{style:{fontSize:'.95rem',color:'var(--hint)',marginBottom:18,lineHeight:1.5}},
         'Pro adds the bass clef, harder notes (ledger lines & middle C), game modes (Timed & Lives), and sharps & flats. One price, forever — no subscription.'),
       msg ? e('div',{style:{fontSize:'.85rem',color:'var(--bad)',marginBottom:12,fontWeight:600}}, msg) : null,
-      e('button',{ onClick:()=>run('buy', ()=>IAP.purchase(), 'Purchase didn’t complete. Please try again.'), disabled:!!busy,
+      e('button',{ onClick:()=>setGate(()=>()=>run('buy', ()=>IAP.purchase(), 'Purchase didn’t complete. Please try again.')), disabled:!!busy,
         style:{ width:'100%', padding:16, borderRadius:14, cursor:busy?'default':'pointer', opacity:busy&&busy!=='buy'?.6:1, fontWeight:800, fontSize:'1.05rem', background:'var(--accent)', border:'none', color:'#fff' } },
-        busy==='buy' ? 'Unlocking…' : 'Unlock Pro — ' + PRICE),
-      e('button',{ onClick:()=>run('restore', ()=>IAP.restore(), 'No previous purchase found.'), disabled:!!busy,
+        busy==='buy' ? 'Unlocking…' : 'Unlock Pro' + (price ? ' — ' + price : '')),
+      e('button',{ onClick:()=>setGate(()=>()=>run('restore', ()=>IAP.restore(), 'No previous purchase found.')), disabled:!!busy,
         style:{ width:'100%', padding:11, marginTop:10, borderRadius:12, cursor:busy?'default':'pointer', fontWeight:700, background:'transparent', border:'1px solid var(--border)', color:'var(--txt)' } },
         busy==='restore' ? 'Restoring…' : 'Restore purchase'),
       e('button',{ onClick:()=> busy || onClose(), style:{ width:'100%', padding:12, marginTop:8, borderRadius:12, cursor:'pointer', fontWeight:700, background:'transparent', border:'none', color:'var(--hint)' } }, 'Keep playing free')
-    )
+    ),
+    gate ? e(ParentalGate,{ onPass:()=>{ const go = gate; setGate(null); go(); }, onCancel:()=>setGate(null) }) : null
+  );
+}
+
+/* ── Footer: privacy & support links (external → parental gate first) ── */
+function Footer(){
+  const [url, setUrl] = React.useState(null);
+  const link = (label, href) => e('button',{ onClick:()=>setUrl(href),
+    style:{ background:'transparent', border:'none', cursor:'pointer', color:'var(--hint)', fontSize:'.75rem', fontWeight:600, padding:'4px 6px' } }, label);
+  return e('div',{style:{textAlign:'center',padding:'0 0 24px',fontSize:'.75rem',color:'var(--hint)'}},
+    link('Privacy', SITE + '/privacy.html'), '·', link('Support', SITE + '/support.html'),
+    e('div',{style:{marginTop:2,opacity:.8}}, '© Highland Music, LLC'),
+    url ? e(ParentalGate,{ onPass:()=>{ window.open(url, '_blank'); setUrl(null); }, onCancel:()=>setUrl(null) }) : null
   );
 }
 
@@ -664,6 +729,8 @@ function App(){
               border:'1px dashed var(--accent)', background:'transparent', color:'var(--accent)', marginBottom:30 } },
             'Bass clef, game modes & more 🔒') : e('div',{style:{height:30}})
         ),
+
+    e(Footer),
 
     upg ? e(UpgradeSheet,{ onClose:()=>setUpg(false) }) : null,
     workshop ? e(WorkshopModal,{ ws:workshop, build, onChoose:chooseOption, onClose:()=>setWorkshop(null) }) : null,

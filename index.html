@@ -44,18 +44,17 @@
     // RevenueCat public SDK key — injected by the native (Capacitor) build.
     // On the web/PWA build this stays a placeholder and IAP falls back to a local unlock.
     window.__RC_KEY__='__RC_KEY__';
-    // The Capacitor iOS build should import the plugin and expose it here, e.g.:
-    //   import { Purchases } from '@revenuecat/purchases-capacitor';
-    //   window.Purchases = Purchases;
   </script>
 </head>
 <body>
   <div id="root"></div>
-  <script crossorigin src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+  <!-- React 18.2.0 vendored locally so the app works offline and inside the native shell -->
+  <script src="vendor/react.production.min.js"></script>
+  <script src="vendor/react-dom.production.min.js"></script>
   <script src="app.js"></script>
   <script>
-    if ('serviceWorker' in navigator) {
+    // web/PWA only — the native shell serves files from the app bundle (no SW on capacitor://)
+    if ('serviceWorker' in navigator && !(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform())) {
       window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(()=>{}));
     }
   </script>
