@@ -27,6 +27,8 @@ workflows:
     scripts:
       - name: Install npm dependencies
         script: npm ci
+      - name: Run tests (staff/pitch mapping + freemium gate)
+        script: npm test
       - name: Build web bundle (www/) + native RevenueCat bridge
         script: npm run build            # reads RC_IOS_KEY from the revenuecat group
       - name: Add iOS platform if missing

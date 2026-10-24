@@ -47,7 +47,38 @@
   </script>
 </head>
 <body>
-  <div id="root"></div>
+  <!-- #root is NOT empty pre-mount: if a script fails, an empty #root renders as a blank purple page,
+       which on iOS reads as a broken app (and is a Guideline 2.1 rejection risk — Jazz Guitar Lab hit
+       exactly this). The placeholder below is removed by app.js once React mounts. -->
+  <div id="root">
+    <div id="nq-boot" style="text-align:center;padding:72px 16px;">
+      <div style="font-size:2.8rem;line-height:1">🎵</div>
+      <div style="font-weight:900;font-size:1.35rem;margin-top:8px;color:var(--txt)">Note Quest</div>
+      <div id="nq-boot-msg" style="margin-top:8px;font-size:.95rem;color:var(--hint)">Loading…</div>
+      <button id="nq-boot-reload" type="button" style="display:none;margin-top:16px;padding:12px 22px;border-radius:12px;border:none;cursor:pointer;font-weight:800;font-size:1rem;background:var(--accent);color:#fff">Reload</button>
+    </div>
+  </div>
+  <script>
+    /* Boot watchdog. Runs BEFORE the scripts below so it catches their load failures too.
+     * Only fires while the app has not mounted, so a later unrelated error can't wipe a running app. */
+    (function () {
+      var done = false;
+      function fail(detail) {
+        if (done || window.__nqMounted) return;
+        done = true;
+        var msg = document.getElementById('nq-boot-msg');
+        var btn = document.getElementById('nq-boot-reload');
+        if (!msg || !btn) return;   // placeholder already gone — app is up, nothing to show
+        msg.textContent = 'Note Quest didn’t finish loading.';
+        btn.style.display = 'inline-block';
+        btn.onclick = function () { location.reload(); };
+        if (detail && window.console) console.error('Note Quest boot failed:', detail);
+      }
+      window.__nqBootFail = fail;
+      window.addEventListener('error', function (ev) { fail(ev && (ev.message || ev.type)); });
+      setTimeout(function () { fail('timeout'); }, 5000);
+    })();
+  </script>
   <!-- React 18.2.0 vendored locally so the app works offline and inside the native shell -->
   <script src="vendor/react.production.min.js"></script>
   <script src="vendor/react-dom.production.min.js"></script>

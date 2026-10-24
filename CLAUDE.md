@@ -18,7 +18,10 @@ The "teacher outreach kit" on the roadmap is therefore a priority, not an aftert
 - **`gh` CLI is NOT installed.** Create repos/Pages via the GitHub REST API using the cached git
   credential: `TOKEN=$(printf "protocol=https\nhost=github.com\n\n" | git credential fill | sed -n 's/^password=//p')`
   then curl/python `api.github.com` (token has `repo` scope).
-- **No Node locally** — `pip install nodejs-bin`, run via `python -c "import nodejs; nodejs.node.run([...])"`.
+- **Node IS available locally** (v24.18 as of 2026-10-24) — `npm ci`, `npm test`, `npm run build` all
+  work on this machine. (Older note said "no Node locally / use `pip install nodejs-bin`" — stale.)
+- **Tests:** `npm test` (`node --test test/*.test.cjs`). `test/harness.cjs` evals `app.js` with stubbed
+  browser globals to unit-test its top-level logic, since the app has no exports/build step.
 
 ## Stack
 Single-file React 18 PWA. React 18.2.0 UMD vendored in `vendor/` (no CDN — works offline/native), no bundler. Everything inline in `app.js`
@@ -76,10 +79,23 @@ A complete, playable **treble + bass clef note-reading game** with modes, reward
 - **Pro:** ledger-line notes (incl. middle C), bass clef, sharps/flats, extra game modes.
   One-time IAP, **no subscription**.
 
-## Pricing — TBD
-`PRICE` = **`$4.99` placeholder**. Kids' note-reading apps skew cheap and competitive; $2.99–$4.99
-one-time is the likely range. A **studio/teacher license** (bulk unlock) is worth exploring given
-the teacher channel. Research before launch. Update only the `PRICE` constant.
+## Pricing — researched 2026-10-24, recommend keeping `$4.99`
+`PRICE` = **`$4.99`** (web fallback label only; native reads the store's localized price).
+
+Market check: **Note Rush — the category leader and the app teachers already recommend — is
+`$8.99`, paid up front, with no free tier** (historical low $4.99). That shapes the position:
+- Note Quest is **free to try with a $4.99 unlock**, so it undercuts Note Rush on commitment while
+  capturing ~55% of its price. Free entry is what makes the **teacher channel** work — a teacher can
+  tell a whole studio "download it, it's free" and parents convert later. A paid-upfront app can't be
+  recommended studio-wide that frictionlessly.
+- **Don't go to $2.99.** Marketing is organic-only (no paid acquisition), so net-per-sale matters more
+  than install volume. With the Apple Small Business Program (15%), $4.99 nets ~$4.24 vs ~$2.54.
+- There is **headroom to $5.99–$6.99** later; raising an unlock price is easy, cutting it trains the
+  audience to wait for sales. Ship at $4.99.
+
+Still open: a **studio/teacher bulk license**. The App Store has no native multi-seat IAP, so this
+means either Volume Purchase Program (Apple Business/Education Manager) or a promo-code batch — worth
+exploring *after* v1 ships, not a launch blocker.
 
 ## Next Session Priorities
 1. ✅ Bass clef mode + Pro note pools through the gate.
@@ -92,5 +108,32 @@ the teacher channel. Research before launch. Update only the `PRICE` constant.
 6. ✅ App Store readiness: parental gate, native-safe IAP + localized price, analytics off natively,
    vendored React, Info.plist patches in `codemagic.yaml`, `STORE.md`. Remaining steps are manual —
    see `STORE.md` → "Still to do by hand" (privacy policy covering kids is the big one).
-7. **Teacher outreach kit** (printable + studio-license concept) — the growth lever.
-8. Pricing research → set `PRICE` (consider a studio/teacher bulk license).
+7. ✅ **Pricing researched → `$4.99`** (2026-10-24). See `## Pricing` above.
+8. ✅ **Ported the two Jazz-Guitar-Lab launch lessons** (2026-10-24) — both were real bugs here:
+   - **Pro leak closed.** The public web build (this repo is public with Pages on) unlocked all of Pro
+     on one tap via the "web fallback". Now gated behind `?dev=1` → `IS_DEV` (sticky as `nq-dev`);
+     `purchase()`/`restore()` fail closed otherwise, and `UpgradeSheet` shows an App Store pitch
+     instead of a dead button. Native is unaffected and never honours the flag.
+   - **Blank-screen boot risk closed.** `#root` now ships a boot placeholder + a watchdog (window
+     `error` or 5s) that offers Reload, and the `ReactDOM` mount is in try/catch. Guarded by a
+     `__nqMounted` flag so a later error can't wipe a running app.
+   - `test/shipping.test.cjs` guards both; **verified they actually fail when each bug is put back.**
+9. **Test suite: `npm test` → 35 tests** (`test/theory.test.cjs` + `test/shipping.test.cjs`), wired
+   into `codemagic.yaml` before the build. The whole staff/pitch map is asserted on both clefs.
+10. **Teacher outreach kit** (printable + studio-license concept) — the growth lever, still to do.
+11. **Open decisions blocking submission — see `STORE.md`:** (a) **Kids Category yes/no** (it's a
+    one-way door, and opting out forces the "for kids" wording out of the subtitle/description per
+    guideline 2.3.8); (b) **the bundle ID** — repo says `com.musicappstudio.notequest`, but the
+    portfolio convention is `com.pablohoney.*` (Archtone ships `com.pablohoney.jazzguitarlab`), and
+    it can't change after the first submission.
+
+## Portfolio status — the business chain is DONE (verified 2026-10-24)
+Checked against the **Jazz Guitar App repo's CLAUDE.md**, which is the live source of truth for
+account status. ⚠️ The `highland-music-site` ops hub is **stale** (last updated 2026-07-15) and makes
+the EIN look like an open blocker — it isn't.
+- ✅ Apple account = **Organization**, `Highland Music LLC` is the seller. ✅ EIN received 2026-08-16.
+- ✅ LLC checking + W-9 + **Paid Applications Agreement ACTIVE** (2026-08-24) — IAP can be sold.
+- ✅ **Archtone (Jazz Guitar Lab) is already live on the App Store** with five 5★ reviews and a live
+  `$14.99 pro_unlock`. So Codemagic → TestFlight → App Review is a **proven** path for this stack.
+- ⚠️ `npm test`/`npm run build` verified locally 2026-10-24; the **iOS build itself is still unrun** —
+  `ios/` is generated in CI, so the first Codemagic run is the first real compile.

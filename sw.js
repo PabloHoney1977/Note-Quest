@@ -1,5 +1,5 @@
 /* Note Quest service worker — cache-first offline shell. Bump CACHE on asset changes. */
-const CACHE = 'nq-v4';
+const CACHE = 'nq-v5';
 const ASSETS = ['./', './index.html', './app.js', './manifest.json',
   './vendor/react.production.min.js', './vendor/react-dom.production.min.js'];
 

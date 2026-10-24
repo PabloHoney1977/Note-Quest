@@ -4,9 +4,23 @@
  * Treble + bass clef note-reading loop. See CLAUDE.md for roadmap. */
 const e = React.createElement;
 
-const PRICE = '$4.99'; // TBD — kids note-reading apps skew cheap. Fallback only: the store's localized price wins.
+const PRICE = '$4.99'; // Set 2026-10-24 (Note Rush, the leader, is $8.99 paid up front — see CLAUDE.md
+                       // → Pricing). Fallback label only: on native the store's localized price wins.
 const IS_NATIVE = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
-const SITE = 'https://highlandmusicapps.com';   // Highland Music, LLC — shared support/privacy site
+
+/* Dev unlock — opt-in via ?dev=1, then sticky in localStorage ('nq-dev').
+ * This repo is PUBLIC with GitHub Pages on, so the web build must fail closed: without this flag a
+ * "web fallback" unlock would hand the whole Pro product away for free at the Pages URL, installable
+ * to a home screen. (Jazz Guitar Lab shipped exactly that leak — see its CLAUDE.md, 2026-08-22.)
+ * Native builds ignore this entirely and always require a real StoreKit purchase. */
+const IS_DEV = (() => {
+  if (IS_NATIVE) return false;
+  try {
+    if (/[?&]dev=1\b/.test(location.search)) localStorage.setItem('nq-dev', '1');
+    return localStorage.getItem('nq-dev') === '1';
+  } catch (_) { return false; }
+})();
+const SITE = 'https://highlandmusicapps.com';   // Highland Music LLC — shared support/privacy site
 
 /* ── Staff geometry ──
  * step 0 = bottom line (y=96). Each diatonic step up = -7px. Geometry is clef-independent;
@@ -167,7 +181,8 @@ const IAP = {
   async purchase(){
     if (!this._rc){
       if (IS_NATIVE) return { ok:false };      // store unavailable — never unlock for free in the app
-      this._set(true); track('upgrade.completed', { via:'web' }); return { ok:true, web:true };   // web fallback for testing
+      if (!IS_DEV) return { ok:false, noStore:true };   // public web build: fail closed, no free Pro
+      this._set(true); track('upgrade.completed', { via:'dev' }); return { ok:true, web:true };    // ?dev=1 test unlock
     }
     try {
       const pkg = await this._package();
@@ -187,6 +202,7 @@ const IAP = {
   async restore(){
     if (!this._rc){
       if (IS_NATIVE) return { ok:false };
+      if (!IS_DEV) return { ok:false, noStore:true };   // nothing to restore on the public web build
       const ok = localStorage.getItem('nq-pro') === '1'; this._set(ok); return { ok };
     }
     try {
@@ -261,6 +277,8 @@ function UpgradeSheet({ onClose }){
   const [msg, setMsg]   = React.useState('');
   const [gate, setGate] = React.useState(null); // pending action awaiting the grown-up check
   const price = IS_NATIVE ? IAP.price : PRICE;  // native shows the store's localized price only
+  // No store on the public web build (see IS_DEV) — show the App Store pitch instead of a dead button.
+  const canBuy = IS_NATIVE || IS_DEV;
   const run = async (kind, fn, failMsg) => {
     if (busy) return;
     setBusy(kind); setMsg('');
@@ -276,12 +294,15 @@ function UpgradeSheet({ onClose }){
       e('div',{style:{fontSize:'.95rem',color:'var(--hint)',marginBottom:18,lineHeight:1.5}},
         'Pro adds the bass clef, harder notes (ledger lines & middle C), game modes (Timed & Lives), and sharps & flats. One price, forever — no subscription.'),
       msg ? e('div',{style:{fontSize:'.85rem',color:'var(--bad)',marginBottom:12,fontWeight:600}}, msg) : null,
-      e('button',{ onClick:()=>setGate(()=>()=>run('buy', ()=>IAP.purchase(), 'Purchase didn’t complete. Please try again.')), disabled:!!busy,
+      !canBuy ? e('div',{style:{padding:'14px 16px',borderRadius:14,background:'var(--bg)',border:'1px solid var(--border)',fontSize:'.9rem',lineHeight:1.5,color:'var(--hint)'}},
+        e('b',{style:{color:'var(--txt)'}},'Coming to the App Store.'),
+        ' Note Quest Pro is a one-time purchase in the iOS app — it can’t be bought from the web version.') : null,
+      canBuy ? e('button',{ onClick:()=>setGate(()=>()=>run('buy', ()=>IAP.purchase(), 'Purchase didn’t complete. Please try again.')), disabled:!!busy,
         style:{ width:'100%', padding:16, borderRadius:14, cursor:busy?'default':'pointer', opacity:busy&&busy!=='buy'?.6:1, fontWeight:800, fontSize:'1.05rem', background:'var(--accent)', border:'none', color:'#fff' } },
-        busy==='buy' ? 'Unlocking…' : 'Unlock Pro' + (price ? ' — ' + price : '')),
-      e('button',{ onClick:()=>setGate(()=>()=>run('restore', ()=>IAP.restore(), 'No previous purchase found.')), disabled:!!busy,
+        busy==='buy' ? 'Unlocking…' : 'Unlock Pro' + (price ? ' — ' + price : '')) : null,
+      canBuy ? e('button',{ onClick:()=>setGate(()=>()=>run('restore', ()=>IAP.restore(), 'No previous purchase found.')), disabled:!!busy,
         style:{ width:'100%', padding:11, marginTop:10, borderRadius:12, cursor:busy?'default':'pointer', fontWeight:700, background:'transparent', border:'1px solid var(--border)', color:'var(--txt)' } },
-        busy==='restore' ? 'Restoring…' : 'Restore purchase'),
+        busy==='restore' ? 'Restoring…' : 'Restore purchase') : null,
       e('button',{ onClick:()=> busy || onClose(), style:{ width:'100%', padding:12, marginTop:8, borderRadius:12, cursor:'pointer', fontWeight:700, background:'transparent', border:'none', color:'var(--hint)' } }, 'Keep playing free')
     ),
     gate ? e(ParentalGate,{ onPass:()=>{ const go = gate; setGate(null); go(); }, onCancel:()=>setGate(null) }) : null
@@ -295,7 +316,7 @@ function Footer(){
     style:{ background:'transparent', border:'none', cursor:'pointer', color:'var(--hint)', fontSize:'.75rem', fontWeight:600, padding:'4px 6px' } }, label);
   return e('div',{style:{textAlign:'center',padding:'0 0 24px',fontSize:'.75rem',color:'var(--hint)'}},
     link('Privacy', SITE + '/privacy.html'), '·', link('Support', SITE + '/support.html'),
-    e('div',{style:{marginTop:2,opacity:.8}}, '© Highland Music, LLC'),
+    e('div',{style:{marginTop:2,opacity:.8}}, '© Highland Music LLC'),
     url ? e(ParentalGate,{ onPass:()=>{ window.open(url, '_blank'); setUrl(null); }, onCancel:()=>setUrl(null) }) : null
   );
 }
@@ -738,4 +759,14 @@ function App(){
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(e(App));
+/* Mount. Clears the boot placeholder (index.html) and fails into it rather than a blank page. */
+try {
+  const host = document.getElementById('root');
+  const boot = document.getElementById('nq-boot');
+  ReactDOM.createRoot(host).render(e(App));
+  window.__nqMounted = true;
+  if (boot && boot.remove) boot.remove();
+} catch (err) {
+  if (window.__nqBootFail) window.__nqBootFail(err);
+  else throw err;
+}
