@@ -219,11 +219,18 @@ Keys are per-app, so Archtone's `appl_` key will **not** work here. Create a **n
 "Note Quest" (cleaner than adding an app to Archtone's project — entitlements and offerings are
 project-scoped). Then, in order:
 
-1. Add an **App Store** app, bundle id `com.pablohoney.notequest`. It wants an **App Store Connect
-   "In-App Purchase" key** (ASC → Users and Access → Integrations → In-App Purchase). **Reuse the
-   `.p8` from Archtone's setup if it was saved** — it's account-wide. The `.p8` downloads **once
-   only**, so if it's lost, generate a new key. Never commit it.
-2. ⚠️ **Create the entitlement with identifier exactly `pro`** — lowercase, no spaces.
+1. Add an **App Store** app, bundle id `com.pablohoney.notequest`. This screen also asks for an
+   **App Store Connect API** key — **click "Select existing key"** and pick the one already uploaded
+   for Archtone; RevenueCat keeps these on the account, so there is nothing to recreate.
+   Only if that list is empty, use **"Add new key"**, which needs a `.p8` from
+   ASC → Users and Access → Integrations → **In-App Purchase** (or an ASC API Team Key with
+   Admin/App Manager role). That `.p8` downloads **once only** — if it's lost, just generate a fresh
+   key. Never commit it.
+   The key is strictly optional (it's what imports `note_quest_pro_unlock` and syncs its price
+   automatically instead of you typing the product in), so a missing key doesn't block you.
+   ⚠️ **The entitlement is NOT on this screen** — that's the next sub-step, in a different section.
+2. **Project → Product catalog → Entitlements → + New.**
+   ⚠️ **Create the entitlement with identifier exactly `pro`** — lowercase, no spaces.
    **RevenueCat fixes entitlement identifiers at creation and they cannot be renamed.** This went
    wrong on Archtone — it was first created as the company name followed by "Pro", and recovery meant
    detaching every associated product, deleting the entitlement, then recreating it. `app.js`
