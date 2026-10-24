@@ -165,11 +165,12 @@ Archtone (Jazz Guitar Lab) is already live, so most of the plumbing exists. **Re
 `pro_unlock` IAP · a RevenueCat **app + `appl_` key** (keys are per-app) · a Codemagic application
 and its two variable groups · screenshots · the IAP review screenshot.
 
-### Step 1 — Publish the privacy policy (do this first; it gates submission)
-`privacy.html` in the `highland-music-site` repo is **edited but uncommitted**. The old copy said the
-apps are "not directed to children under 13", which contradicts a Kids Category submission. Review,
-commit, push; Pages redeploys in ~1 min. Verify `https://highlandmusicapps.com/privacy.html` shows the
-"Children's privacy (COPPA)" heading — **App Review reads the live page, not the repo.**
+### Step 1 — Publish the privacy policy ✅ DONE 2026-10-24
+`privacy.html` in the `highland-music-site` repo said all the apps are "not directed to children
+under 13", which contradicts a Kids Category submission. Rewritten with a Note-Quest-specific COPPA
+section and **pushed — verified live** at `https://highlandmusicapps.com/privacy.html` (commit
+`aed0983`). Jazz Guitar Lab and Piano Chords Lab keep the general-audience wording, which is still
+accurate for them.
 
 ### Step 2 — Register the bundle id
 developer.apple.com → Certificates, Identifiers & Profiles → Identifiers → **+** → App IDs → App.
@@ -262,15 +263,27 @@ placeholder), the app **boots with the device in airplane mode** (it must — Re
 there are no network calls), the parental gate appears before purchase and before the Privacy/Support
 links, and the staff renders correctly on **iPad** as well as iPhone.
 
-### Step 8 — Screenshots
-Required: **iPhone 6.9" (1320×2868)** and **iPad 13" (2064×2752)** — iPad is a hard block because the
-app declares iPad support. Reuse Archtone's approach: render from the live PWA with `playwright-core`
-driving installed Edge (see the `app-store-screenshots` memory and the `shoot/shoot.js` pattern),
-rather than shooting a device by hand.
-Suggested five: the staff + letter buttons · a streak/confetti moment · the Instrument Workshop ·
-bass clef with a ledger note · the results screen. Use **`?dev=1`** to unlock Pro for the bass-clef
-and game-mode shots. Note Quest defaults to the **light** theme, so shoot light.
-Also capture the **paywall sheet** for the IAP review screenshot in Step 4.
+### Step 8 — Screenshots ✅ DONE 2026-10-24
+**12 PNGs, all at Apple's exact required sizes**, in
+`~/Downloads/NoteQuest-AppStore-Screenshots/{iPhone-6.9,iPad-13}/`:
+
+| # | Shot | What it shows |
+|---|---|---|
+| 1 | `gameplay` | the staff + letter keypad mid-run — score 36, streak 3, best 24 |
+| 2 | `streak` | the milestone celebration: confetti mid-fall, 🎵 "On fire! 5 streak!" |
+| 3 | `workshop` | a part-built guitar with its progress bar + a shelf of 3 finished instruments |
+| 4 | `bassclef` | bass clef showing **middle C on its ledger line** |
+| 5 | `results` | end of a Lives run — 112, 7/10, 70%, best streak 7, sticker shelf |
+| 6 | `paywall` | **this is the IAP review screenshot for Step 4** — real "Unlock Pro — $4.99" + Restore |
+
+Upload 1–5 as the store screenshots (Apple's page is by device type; iPhone 6.9" and iPad 13" are
+the two required). Use **6** as the IAP review screenshot, not as a store screenshot.
+
+Regenerate any time with `npm i -D playwright-core && node scripts/shoot-screenshots.cjs` — it
+renders from the repo itself (no device, no simulator, no Mac) by driving installed Edge, presets
+state through `localStorage`, plays the game by reading each note off the staff SVG, and verifies
+every PNG is exactly the required pixel size. Note Quest opens **light**, so the set is light
+(Archtone's is dark — don't copy that choice across).
 
 ### Step 9 — Sandbox purchase test
 On device, signed into the sandbox Apple ID: buy `pro_unlock`, confirm Pro unlocks, delete and

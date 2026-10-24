@@ -30,7 +30,20 @@
       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
       -webkit-font-smoothing:antialiased;
     }
-    #root{max-width:560px; margin:0 auto; padding:0 16px env(safe-area-inset-bottom);}
+    /* The playfield is a fixed-height column, so on a tall phone or an iPad it would otherwise sit
+       in the top half with dead space beneath. `margin:auto` on a flex child centres it only when
+       there IS slack and never clips when the content is taller than the viewport (which
+       align-items:center would). */
+    body{min-height:100dvh; display:flex;}
+    #root{max-width:560px; width:100%; margin:auto; padding:16px 16px env(safe-area-inset-bottom);}
+    .nq-staff{max-width:320px;}
+    /* iPad and other large screens: scale the whole thing up rather than stranding it in a narrow
+       column. Type is rem-based, so raising the root size carries most of the layout with it. */
+    @media (min-width:700px){
+      html{font-size:23px;}
+      #root{max-width:860px;}
+      .nq-staff{max-width:660px;}
+    }
     button{font-family:inherit;}
     /* Reward animations (kid celebration) */
     @keyframes nq-fall { 0%{transform:translateY(-10px) rotate(0);opacity:1} 100%{transform:translateY(170px) rotate(400deg);opacity:0} }

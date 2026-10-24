@@ -231,7 +231,8 @@ function Staff({ clef, step, acc }){
   for (let s = 10; s <= step; s += 2) ledgers.push(s);
   for (let s = -2; s >= step; s -= 2) ledgers.push(s);
   return e('svg',{ viewBox:`0 0 ${W} ${H}`, width:'100%',
-      style:{ display:'block', maxWidth:W, margin:'0 auto', transform:'translateZ(0)', WebkitTransform:'translateZ(0)' } },
+      className:'nq-staff',   // max-width lives in CSS so it can grow on iPad (see index.html)
+      style:{ display:'block', margin:'0 auto', transform:'translateZ(0)', WebkitTransform:'translateZ(0)' } },
     // staff lines
     lines.map((ly,i)=>e('line',{ key:i, x1:x0, y1:ly, x2:x1, y2:ly, stroke:'var(--staff)', strokeWidth:1.6 })),
     // clef glyph (decorative — serif fonts render it; game works regardless)
