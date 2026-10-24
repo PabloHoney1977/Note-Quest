@@ -207,12 +207,29 @@ screenshot of the paywall** — grab the `UpgradeSheet` from the TestFlight buil
 with a dead paywall (Archtone's lesson).
 
 ### Step 5 — RevenueCat: a new app in the existing account
-Keys are per-app, so Archtone's `appl_` key will **not** work here.
-Create a **new project** "Note Quest" (cleaner than adding an app to Archtone's project — entitlements
-and offerings are project-scoped). In it: add an **App Store** app with bundle id
-`com.pablohoney.notequest` and the shared App Store Connect credentials · create entitlement **`pro`**
-· add product **`pro_unlock`** and attach it to `pro` · create an offering (default/current) with a
-**Lifetime** package pointing at `pro_unlock`. Copy the **public iOS SDK key** (`appl_…`) — Step 6.
+Keys are per-app, so Archtone's `appl_` key will **not** work here. Create a **new project**
+"Note Quest" (cleaner than adding an app to Archtone's project — entitlements and offerings are
+project-scoped). Then, in order:
+
+1. Add an **App Store** app, bundle id `com.pablohoney.notequest`. It wants an **App Store Connect
+   "In-App Purchase" key** (ASC → Users and Access → Integrations → In-App Purchase). **Reuse the
+   `.p8` from Archtone's setup if it was saved** — it's account-wide. The `.p8` downloads **once
+   only**, so if it's lost, generate a new key. Never commit it.
+2. ⚠️ **Create the entitlement with identifier exactly `pro`** — lowercase, no spaces.
+   **RevenueCat fixes entitlement identifiers at creation and they cannot be renamed.** This went
+   wrong on Archtone — it was first created as the company name followed by "Pro", and recovery meant
+   detaching every associated product, deleting the entitlement, then recreating it. `app.js`
+   hardcodes `IAP.ENTITLEMENT = 'pro'`, so anything else silently never grants Pro.
+3. Add product **`pro_unlock`** and attach it to `pro`.
+4. Create an offering, mark it **Current**, with a **Lifetime** package holding `pro_unlock`.
+5. Copy the **public iOS SDK key** (`appl_…`) for Step 6. ⚠️ Onboarding also creates a **Test Store**
+   with demo Monthly/Yearly/Lifetime products and a **`test_…`** key — **ignore the test key**; only
+   the `appl_…` key from the App Store app works on device.
+
+Two things that are *easier* here than on Archtone: the IAP only needs status **"Ready to Submit"**
+(not Approved) for RevenueCat to sync and for sandbox purchases to work — Apple reviews it with the
+first app submission. And Note Quest's `_package()` looks the package up **by product identifier**
+rather than taking `availablePackages[0]`, so leftover empty package shells can't break the purchase.
 
 ### Step 6 — Codemagic
 Add the `Note-Quest` repo as an application. Then App settings → Environment variables, creating two
@@ -226,7 +243,13 @@ groups (names must match `codemagic.yaml` exactly):
   it rather than shipping an app whose purchases can't work.
 
 The App Store Connect integration `Codemagic CI` is already on the account — just make sure this app
-can see it. Then run the **`ios-release`** workflow by hand (there's no push trigger, deliberately).
+can see it. `RC_IOS_KEY` is a *publishable* client key, so marking it Secure is optional; the
+`appstore_credentials` five are genuine secrets and must all be Secure.
+
+Then run the **`ios-release`** workflow by hand from the dashboard ("Start new build"). Unlike
+Archtone there is **no push trigger**, so landing on `main` will *not* start an iOS build — that's
+deliberate (main is also the web/Pages branch). Nobody can kick off a build from a Claude session
+either: there's no Codemagic API token in this environment, so builds and their status are dashboard-only.
 
 **Expect the first build to need a nudge** — `ios/` is generated in CI, so this is the first time Note
 Quest has ever compiled for iOS. The config already encodes every failure Archtone hit (SPM not
