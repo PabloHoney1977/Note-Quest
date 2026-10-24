@@ -203,7 +203,8 @@ description, keywords, Support + Privacy URLs, copyright.
 Monetization → In-App Purchases → **+** → **Non-Consumable**.
 Reference name "Note Quest Pro" · Product ID **`pro_unlock`** (must match `IAP.PRODUCT` in `app.js`)
 · price **$4.99** tier · a localization (display name + description) · and the **required review
-screenshot of the paywall** — grab the `UpgradeSheet` from the TestFlight build in Step 8.
+screenshot of the paywall** — already rendered, upload `iPhone-6.9/6-paywall.png` from the Step 8
+folder.
 ⚠️ **Attach the IAP to the first version's submission.** If it goes separately the app can be approved
 with a dead paywall (Archtone's lesson).
 
