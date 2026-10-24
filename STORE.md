@@ -201,10 +201,28 @@ description, keywords, Support + Privacy URLs, copyright.
 
 ### Step 4 — Create the IAP ✅ created 2026-10-24
 Monetization → In-App Purchases → **+** → **Non-Consumable**.
-Reference name "Note Quest Pro" · Product ID **`note_quest_pro_unlock`** · price **$4.99** tier ·
-a localization (display name + description) · and the **required review screenshot of the paywall**:
+Reference name "Note Quest Pro" · Product ID **`note_quest_pro_unlock`** · price **$4.99** tier.
+
+**Localization** (customer-facing; the buyer is a *parent*, past the parental gate):
+
+| Field | Value | Limit |
+|---|---|---|
+| Display Name | `Note Quest Pro` | 30 chars (uses 14) |
+| Description | `Bass clef, middle C, sharps and game modes` | 45 chars (uses 42) |
+
+"Middle C" is deliberate — it's the phrase that reads to parents and piano teachers, and it signals
+the tier of material. Alternate if you'd rather be musically precise:
+`Bass clef, ledger notes, sharps & modes` (39). Don't spend characters on "one-time" or "no
+subscription"; the **Non-Consumable** type already says that in the store UI. Keep the description
+covering the same four things the in-app paywall promises — App Review compares them.
+
+**Required review screenshot of the paywall:**
 
 > `C:\Users\pehre\Downloads\NoteQuest-AppStore-Screenshots\iPhone-6.9\6-paywall.png`
+
+⚠️ Until the localization, price **and** screenshot are all in, the IAP sits at **"Missing Metadata"**
+and RevenueCat shows that same status — which also means **sandbox purchases will fail**. It needs to
+reach **"Ready to Submit"** (not Approved) before Step 9 can work.
 
 ⚠️ **The product id is `note_quest_pro_unlock`, NOT `pro_unlock` — do not "fix" it back.** Product
 IDs are unique across the whole developer account and Archtone already owns `pro_unlock`. `app.js`
@@ -237,6 +255,11 @@ project-scoped). Then, in order:
    hardcodes `IAP.ENTITLEMENT = 'pro'`, so anything else silently never grants Pro.
 3. Add product **`note_quest_pro_unlock`** and attach it to `pro`.
 4. Create an offering, mark it **Current**, with a **Lifetime** package holding `note_quest_pro_unlock`.
+   ⚠️ **Don't skip this because purchases seem to work without it.** `IAP._package()` reads
+   `offerings.current.availablePackages`; with no current offering it returns null, so `IAP.price`
+   is never set and the paywall button renders as bare **"Unlock Pro"** with no price. The purchase
+   still succeeds via the `purchaseStoreProduct` fallback, so this fails *quietly* — a working
+   button with a missing price is exactly the kind of thing that reaches review unnoticed.
 5. Copy the **public iOS SDK key** (`appl_…`) for Step 6. ⚠️ Onboarding also creates a **Test Store**
    with demo Monthly/Yearly/Lifetime products and a **`test_…`** key — **ignore the test key**; only
    the `appl_…` key from the App Store app works on device.
