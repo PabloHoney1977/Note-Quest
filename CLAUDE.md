@@ -121,11 +121,20 @@ exploring *after* v1 ships, not a launch blocker.
 9. **Test suite: `npm test` → 35 tests** (`test/theory.test.cjs` + `test/shipping.test.cjs`), wired
    into `codemagic.yaml` before the build. The whole staff/pitch map is asserted on both clefs.
 10. **Teacher outreach kit** (printable + studio-license concept) — the growth lever, still to do.
-11. **Open decisions blocking submission — see `STORE.md`:** (a) **Kids Category yes/no** (it's a
-    one-way door, and opting out forces the "for kids" wording out of the subtitle/description per
-    guideline 2.3.8); (b) **the bundle ID** — repo says `com.musicappstudio.notequest`, but the
-    portfolio convention is `com.pablohoney.*` (Archtone ships `com.pablohoney.jazzguitarlab`), and
-    it can't change after the first submission.
+11. ✅ **Two launch decisions settled 2026-10-24 (user's call):**
+    - **Ship in the Kids Category** (age band 6–8, rating 4+). One-way door. Consequences now enforced
+      in code: `track()` is a **permanent no-op** and the analytics key placeholder is gone from
+      `index.html` (guideline 1.3 forbids third-party analytics there — **never add an analytics SDK
+      to this app**), and any future **cross-promo link to a sibling app must sit behind the parental
+      gate**. Upside: the "for kids" wording in the subtitle is *reserved* for this category (2.3.8),
+      so the listing copy in `STORE.md` is usable as written.
+    - **Bundle ID = `com.pablohoney.notequest`** — matches the live sibling
+      (`com.pablohoney.jazzguitarlab`). Applied to `capacitor.config.json`, `codemagic.yaml`,
+      `README.md`; a test keeps the config and CI in sync. **Cannot change after first submission.**
+    - ⚠️ Known, accepted risk: **RevenueCat is a third party** receiving device metadata for the
+      purchase, which sits awkwardly with 1.3's "no device information to third parties". Common
+      practice in Kids apps and it's behind the parental gate; if App Review objects, the fallback is
+      StoreKit 2 direct, costing one update.
 
 ## Portfolio status — the business chain is DONE (verified 2026-10-24)
 Checked against the **Jazz Guitar App repo's CLAUDE.md**, which is the live source of truth for

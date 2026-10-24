@@ -2,7 +2,7 @@
 # One-time setup in the Codemagic UI:
 #   • Connect an App Store Connect API key as an integration named "CodemagicASC".
 #   • Create an environment group "revenuecat" with RC_IOS_KEY = your RevenueCat *public* iOS SDK key.
-#   • Register the bundle id com.musicappstudio.notequest in App Store Connect.
+#   • Register the bundle id com.pablohoney.notequest in App Store Connect.
 #   • In App Store Connect, create the non-consumable IAP "pro_unlock" and attach it in RevenueCat
 #     (entitlement "pro", current offering) — the app reads its localized price from there.
 # The ios/ native project is generated on the fly (npx cap add ios) so it need not be committed.
@@ -20,7 +20,7 @@ workflows:
       vars:
         XCODE_WORKSPACE: "ios/App/App.xcworkspace"
         XCODE_SCHEME: "App"
-        BUNDLE_ID: "com.musicappstudio.notequest"
+        BUNDLE_ID: "com.pablohoney.notequest"
       node: 22
       xcode: latest
       cocoapods: default

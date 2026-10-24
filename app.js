@@ -127,7 +127,12 @@ function playInstrument(cfg){
   });
 }
 // Analytics are web-only: the iOS app ships in the Kids category, which bars third-party analytics.
-const track = (ev, props) => { if (IS_NATIVE) return; try { window.posthog && window.posthog.capture(ev, props); } catch(_){} };
+/* track() is a PERMANENT no-op. Note Quest ships in the Kids Category, where guideline 1.3 forbids
+ * third-party analytics and sending any device information to third parties. The call sites are kept
+ * so the interesting moments stay marked in the code, but nothing is ever collected or transmitted.
+ * ⛔ Do not wire an analytics SDK in here — it would breach 1.3 and contradict the published privacy
+ * policy (highlandmusicapps.com/privacy.html states Note Quest contains no analytics at all). */
+const track = (_ev, _props) => {};
 
 /* ── In-app purchase (RevenueCat) ──
  * Entitlement 'pro', product 'pro_unlock' (ported from Jazz Guitar Lab, nq- prefixes).

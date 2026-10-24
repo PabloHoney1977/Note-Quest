@@ -62,11 +62,18 @@ Verify against RevenueCat's current App Privacy guidance before submitting.
 Suggested shots: the staff + letter buttons; a streak confetti moment; the Instrument Workshop;
 bass clef with a ledger note; the results screen.
 
-## ⚠️ Decide first: Kids Category, yes or no?
+## ✅ DECIDED 2026-10-24: ship in the Kids Category
 
-Opting into the Kids Category is **optional**, and it is a one-way door — guideline 1.3: "once
-customers expect your app to follow the Kids Category requirements, it will need to continue to meet
-these guidelines in subsequent updates, **even if you decide to deselect the category**."
+Age band **6–8**, age rating **4+**, Education primary / Music secondary. This is a **one-way door** —
+guideline 1.3: "once customers expect your app to follow the Kids Category requirements, it will need
+to continue to meet these guidelines in subsequent updates, **even if you decide to deselect the
+category**." Two standing consequences of this choice, both now enforced in code:
+
+- **No analytics in this app, ever.** `track()` is a permanent no-op and the analytics key
+  placeholder is gone from `index.html`; `test/shipping.test.cjs` fails if either comes back.
+- **Cross-promotion to Archtone / Piano Chords Lab must sit behind the parental gate** (1.3 treats
+  links out of the app as a distraction). The `Footer` gate pattern is the one to reuse. Note that the
+  teacher channel — not cross-promo — is this app's stated growth lever, so this costs little here.
 
 What the category requires (1.3 / 5.1.4), and where we stand:
 
@@ -89,11 +96,9 @@ but it is the one item that is not unambiguously clean. Options:
 - **Drop to StoreKit 2 directly** — no third party at all, fully clean, but a real rewrite of the
   `IAP` module and loses RevenueCat's receipt validation/restore plumbing.
 
-**If we do NOT join the Kids Category**, guideline 2.3.8 kicks in: terms like "for kids"/"for
-children" are *reserved* for that category and can't appear in the name, subtitle, icon, screenshots
-or description. The current **subtitle "Note-reading game for kids" and the line "Made for young
-musicians" would both have to change** (e.g. "Learn to read music, one note at a time" / "for
-beginners and students"). Age rating 4+ and the Education category are unaffected either way.
+**Because we ARE joining**, the listing copy below is good as written — guideline 2.3.8 *reserves*
+"for kids"/"for children" wording for this category, so the subtitle "Note-reading game for kids" and
+"Made for young musicians" are allowed here (and would have had to be rewritten otherwise).
 
 ## ✅ The business/account chain is DONE — none of it blocks Note Quest
 
@@ -133,14 +138,12 @@ not structural. Still worth doing if not already: enroll in the **Apple Small Bu
 2. ~~**Pricing:** pick the IAP price tier.~~ ✅ **Researched 2026-10-24 → `$4.99`** (CLAUDE.md →
    Pricing has the reasoning; Note Rush is $8.99 paid up front). `PRICE` in `app.js` is already
    $4.99 — just pick the matching tier in App Store Connect.
-3. **⚠️ Confirm the bundle ID before registering it — it cannot be changed after the first
-   submission.** The repo currently says **`com.musicappstudio.notequest`**, which matches neither
-   the portfolio namespace the ops hub records (`com.pablohoney.*`) nor the actual seller
-   (`Highland Music LLC`). Pick one deliberately — e.g. `com.highlandmusic.notequest` — then update
-   `capacitor.config.json` and `codemagic.yaml` (`BUNDLE_ID`) to match, and check what Jazz Guitar
-   Lab actually registered so the portfolio is consistent.
-   Then in **App Store Connect:** create the app and the non-consumable IAP `pro_unlock`, and submit
-   the IAP *with* the first app version.
+3. ~~**Confirm the bundle ID.**~~ ✅ **Decided 2026-10-24: `com.pablohoney.notequest`** — matches the
+   portfolio convention and the already-live sibling (`com.pablohoney.jazzguitarlab`). Already applied
+   to `capacitor.config.json`, `codemagic.yaml` (`BUNDLE_ID`) and `README.md`, and a test asserts the
+   two stay in sync. **Register it in the Apple Developer portal, then in App Store Connect** create
+   the app and the non-consumable IAP `pro_unlock` — and submit the IAP *with* the first app version,
+   not separately (Archtone's lesson: otherwise the app can be approved with a dead paywall).
 4. **RevenueCat:** create the project, attach `pro_unlock` to the entitlement `pro` and the current
    offering, and put the public iOS key in the Codemagic `revenuecat` group as `RC_IOS_KEY`.
    The CI build now fails if the key is missing.

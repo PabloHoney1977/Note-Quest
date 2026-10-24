@@ -40,9 +40,13 @@
     @keyframes nq-strum { 0%{transform:rotate(0)} 18%{transform:rotate(-3deg) scale(1.03)} 46%{transform:rotate(2.4deg)} 72%{transform:rotate(-1.2deg)} 100%{transform:rotate(0)} }
   </style>
   <script>
-    window.__POSTHOG_KEY__='__POSTHOG_KEY__';
+    /* NO ANALYTICS — deliberately. Note Quest ships in the App Store Kids Category, and guideline
+     * 1.3 forbids third-party analytics there. That is a standing constraint, not a TODO: do not
+     * add an analytics SDK or key to this app. The analytics key placeholder that used to sit here
+     * was removed so it cannot be wired up by mistake, and a test in test/shipping.test.cjs fails
+     * if one reappears. See STORE.md → Kids Category. */
     // RevenueCat public SDK key — injected by the native (Capacitor) build.
-    // On the web/PWA build this stays a placeholder and IAP falls back to a local unlock.
+    // On the web/PWA build this stays a placeholder and there is no store (see IS_DEV in app.js).
     window.__RC_KEY__='__RC_KEY__';
   </script>
 </head>

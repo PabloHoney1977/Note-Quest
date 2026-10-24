@@ -50,7 +50,7 @@ npx cap open ios                    # open in Xcode
   root directly and never sees `www/`.
 - **RevenueCat:** `native/rc-bridge.mjs` is bundled into `www/native.js` (native only) and assigns
   `window.Purchases` + `window.__RC_KEY__` (embedded from `RC_IOS_KEY`). On the web there's no store,
-  so the `IAP` module falls back to a local unlock. Bundle id: `com.musicappstudio.notequest`.
+  so the `IAP` module falls back to a local unlock. Bundle id: `com.pablohoney.notequest`.
 - **CI:** `codemagic.yaml` runs the build, generates the iOS project, syncs, and ships to TestFlight.
   Configure the `revenuecat` env group (`RC_IOS_KEY`) and an App Store Connect integration first.
 - **Icons:** source is `assets/icon.svg`/`assets/icon.png`; PWA PNGs live in `icons/`.

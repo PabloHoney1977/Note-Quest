@@ -107,11 +107,15 @@ test('the only link out of the app is behind the parental gate', () => {
     'external links must open only after the parental gate passes');
 });
 
-test('analytics are inert: no analytics script is ever loaded', () => {
-  assert.doesNotMatch(html, /posthog[^"']*\.js|app\.posthog\.com|us\.i\.posthog\.com/i,
-    'no analytics snippet may load — the Kids Category forbids third-party analytics');
-  assert.match(appjs, /const track = \(ev, props\) => \{ if \(IS_NATIVE\) return;/,
-    'track() must no-op on native');
+test('no analytics anywhere: the Kids Category forbids it outright', () => {
+  // Guideline 1.3 — no third-party analytics, and no device info to third parties. This is a
+  // standing constraint for this app, so track() must be an unconditional no-op.
+  assert.match(appjs, /const track = \(_ev, _props\) => \{\};/,
+    'track() must be a permanent no-op, not conditional');
+  for (const f of ['app.js', 'index.html']) {
+    assert.doesNotMatch(read(f), /posthog/i,
+      `${f}: no analytics SDK or key may appear — Kids Category apps may not include analytics`);
+  }
 });
 
 /* ── Store metadata consistency ── */
