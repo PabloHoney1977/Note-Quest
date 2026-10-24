@@ -11,6 +11,7 @@ const EXPORTS = [
   'PC', 'SEQ', 'LS', 'BOTTOM_Y', 'yForStep', 'needsLedgerBelow', 'needsLedgerAbove',
   'midiOf', 'buildSteps', 'CLEFS', 'buildPool', 'MODES', 'STICKERS',
   'LETTERS', 'ACCIDENTALS', 'accSym', 'noteName', 'canSharp', 'canFlat', 'PRICE', 'SITE',
+  'IAP',   // identifiers only — the store calls are never exercised here
 ];
 
 function load() {

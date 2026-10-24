@@ -8,7 +8,7 @@ Everything to paste into App Store Connect, plus the remaining manual steps.
 **Subtitle (30):** Note-reading game for kids
 **Category:** Education (primary), Music (secondary) — **Kids category, Ages 6–8** (or 9–11; pick one band)
 **Age rating:** 4+
-**Price:** Free, with one non-consumable IAP (`pro_unlock`). Set the price tier in App Store Connect;
+**Price:** Free, with one non-consumable IAP (`note_quest_pro_unlock`). Set the price tier in App Store Connect;
 the app shows the store's localized price automatically.
 
 **Promotional text (170):**
@@ -53,7 +53,7 @@ Verify against RevenueCat's current App Privacy guidance before submitting.
 ## App Review notes (paste into "Notes")
 > Kids-category app. Purchases, Restore, and the Privacy/Support links are behind a parental gate
 > (a spelled-out multiplication question typed on a keypad). Pro is a single non-consumable
-> unlock ("pro_unlock"). No login is required. The app makes no network requests except to
+> unlock ("note_quest_pro_unlock"). No login is required. The app makes no network requests except to
 > RevenueCat for the purchase.
 
 ## Screenshots needed
@@ -121,7 +121,7 @@ not structural. Still worth doing if not already: enroll in the **Apple Small Bu
 - **ITMS-90062/90186:** never upload a build whose `MARKETING_VERSION` matches an already-approved
   version. Note Quest is a brand-new app, so `1.0` is fine for the first train.
 - **⛔ Never press "Remove from Review"** — it forfeits queue position entirely.
-- **Submit `pro_unlock` attached to the version**, not separately, or the app can be approved with a
+- **Submit `note_quest_pro_unlock` attached to the version**, not separately, or the app can be approved with a
   dead paywall.
 - Expect a slow first review (new app + first IAP reviewed with the binary). Use "Manually release
   this version" so approval parks in *Pending Developer Release* instead of going live unwatched.
@@ -142,7 +142,7 @@ not structural. Still worth doing if not already: enroll in the **Apple Small Bu
    portfolio convention and the already-live sibling (`com.pablohoney.jazzguitarlab`). Already applied
    to `capacitor.config.json`, `codemagic.yaml` (`BUNDLE_ID`) and `README.md`, and a test asserts the
    two stay in sync. **Register it in the Apple Developer portal, then in App Store Connect** create
-   the app and the non-consumable IAP `pro_unlock` — and submit the IAP *with* the first app version,
+   the app and the non-consumable IAP `note_quest_pro_unlock` — and submit the IAP *with* the first app version,
    not separately (Archtone's lesson: otherwise the app can be approved with a dead paywall).
 ## Walkthrough — what's reusable from Archtone vs. new for Note Quest
 
@@ -162,7 +162,7 @@ Archtone (Jazz Guitar Lab) is already live, so most of the plumbing exists. **Re
 | Screenshot tooling (playwright-core + installed Edge) | ✅ reuse the script pattern |
 
 **New, per-app:** bundle id registration · App Store Connect app record · Note Quest's own
-`pro_unlock` IAP · a RevenueCat **app + `appl_` key** (keys are per-app) · a Codemagic application
+`note_quest_pro_unlock` IAP · a RevenueCat **app + `appl_` key** (keys are per-app) · a Codemagic application
 and its two variable groups · screenshots · the IAP review screenshot.
 
 ### Step 1 — Publish the privacy policy ✅ DONE 2026-10-24
@@ -199,12 +199,18 @@ description, keywords, Support + Privacy URLs, copyright.
   (`iupdate.dnb.com`, free, ~a month to propagate) **or launch US-only and add the EU later.**
 - Note the app's **numeric Apple ID** from App Information — Step 6 needs it.
 
-### Step 4 — Create the IAP
+### Step 4 — Create the IAP ✅ created 2026-10-24
 Monetization → In-App Purchases → **+** → **Non-Consumable**.
-Reference name "Note Quest Pro" · Product ID **`pro_unlock`** (must match `IAP.PRODUCT` in `app.js`)
-· price **$4.99** tier · a localization (display name + description) · and the **required review
-screenshot of the paywall** — already rendered, upload `iPhone-6.9/6-paywall.png` from the Step 8
-folder.
+Reference name "Note Quest Pro" · Product ID **`note_quest_pro_unlock`** · price **$4.99** tier ·
+a localization (display name + description) · and the **required review screenshot of the paywall**:
+
+> `C:\Users\pehre\Downloads\NoteQuest-AppStore-Screenshots\iPhone-6.9\6-paywall.png`
+
+⚠️ **The product id is `note_quest_pro_unlock`, NOT `pro_unlock` — do not "fix" it back.** Product
+IDs are unique across the whole developer account and Archtone already owns `pro_unlock`. `app.js`
+sets `IAP.PRODUCT` to the namespaced id and a test asserts it, so the code, this file and App Store
+Connect stay in step. (The *entitlement* is still plain `pro` — that's a separate RevenueCat concept
+and is per-project, so it doesn't collide.)
 ⚠️ **Attach the IAP to the first version's submission.** If it goes separately the app can be approved
 with a dead paywall (Archtone's lesson).
 
@@ -222,8 +228,8 @@ project-scoped). Then, in order:
    wrong on Archtone — it was first created as the company name followed by "Pro", and recovery meant
    detaching every associated product, deleting the entitlement, then recreating it. `app.js`
    hardcodes `IAP.ENTITLEMENT = 'pro'`, so anything else silently never grants Pro.
-3. Add product **`pro_unlock`** and attach it to `pro`.
-4. Create an offering, mark it **Current**, with a **Lifetime** package holding `pro_unlock`.
+3. Add product **`note_quest_pro_unlock`** and attach it to `pro`.
+4. Create an offering, mark it **Current**, with a **Lifetime** package holding `note_quest_pro_unlock`.
 5. Copy the **public iOS SDK key** (`appl_…`) for Step 6. ⚠️ Onboarding also creates a **Test Store**
    with demo Monthly/Yearly/Lifetime products and a **`test_…`** key — **ignore the test key**; only
    the `appl_…` key from the App Store app works on device.
@@ -287,7 +293,7 @@ every PNG is exactly the required pixel size. Note Quest opens **light**, so the
 (Archtone's is dark — don't copy that choice across).
 
 ### Step 9 — Sandbox purchase test
-On device, signed into the sandbox Apple ID: buy `pro_unlock`, confirm Pro unlocks, delete and
+On device, signed into the sandbox Apple ID: buy `note_quest_pro_unlock`, confirm Pro unlocks, delete and
 reinstall, then confirm **Restore purchase** brings it back. Both paths sit behind the parental gate.
 
 ### Step 10 — Submit

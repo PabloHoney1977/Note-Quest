@@ -24,7 +24,7 @@
 #     not Archtone's. The other four are account-wide and copy across unchanged.
 #   • Variable group "revenuecat" — RC_IOS_KEY = Note Quest's *public* iOS SDK key (`appl_…`).
 #     This is a different key from Archtone's: RevenueCat keys are per-app.
-#   • Register the bundle id com.pablohoney.notequest and create the non-consumable IAP "pro_unlock"
+#   • Register the bundle id com.pablohoney.notequest and create the non-consumable IAP "note_quest_pro_unlock"
 #     in App Store Connect, then attach it in RevenueCat (entitlement "pro", current offering).
 #
 # No `triggering:` block — builds are started by hand. Pushing to main publishes the web/PWA build via

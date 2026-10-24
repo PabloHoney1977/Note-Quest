@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { readFileSync } = require('node:fs');
 const { join } = require('node:path');
+const { load } = require('./harness.cjs');
 
 const root = join(__dirname, '..');
 const read = (f) => readFileSync(join(root, f), 'utf8');
@@ -115,6 +116,33 @@ test('no analytics anywhere: the Kids Category forbids it outright', () => {
   for (const f of ['app.js', 'index.html']) {
     assert.doesNotMatch(read(f), /posthog/i,
       `${f}: no analytics SDK or key may appear — Kids Category apps may not include analytics`);
+  }
+});
+
+/* ── IAP identifiers: these must match App Store Connect / RevenueCat character for character ── */
+test('the product id is this app\'s own, not the one Archtone already owns', () => {
+  const A = load();
+  // Product IDs are unique across the whole developer account, and Jazz Guitar Lab / Archtone
+  // already registered `pro_unlock`, so Note Quest's is namespaced.
+  assert.match(appjs, /PRODUCT: 'note_quest_pro_unlock'/,
+    "the product id must be 'note_quest_pro_unlock' — 'pro_unlock' belongs to Archtone");
+  assert.strictEqual(A.IAP.PRODUCT, 'note_quest_pro_unlock');
+  // The entitlement is a different thing and IS shared-shaped across apps: RevenueCat fixes
+  // entitlement identifiers at creation and app.js hardcodes this one.
+  assert.strictEqual(A.IAP.ENTITLEMENT, 'pro');
+});
+
+test('the docs quote the same product id the code uses', () => {
+  const id = appjs.match(/PRODUCT: '([^']+)'/)[1];
+  for (const f of ['STORE.md', 'codemagic.yaml']) {
+    const text = read(f);
+    // A bare `pro_unlock` is only legitimate where the text is talking about the sibling app, which
+    // really does own that id. Anywhere else it means a doc drifted away from the code.
+    const aboutSibling = (line) => /Archtone|Jazz Guitar|14\.99/.test(line);
+    const stray = text.split('\n').filter((line) =>
+      /(^|[^_a-z])pro_unlock/.test(line) && !line.includes(id) && !aboutSibling(line));
+    assert.deepStrictEqual(stray, [],
+      `${f} still says 'pro_unlock' where it means '${id}'`);
   }
 });
 

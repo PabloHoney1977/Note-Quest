@@ -57,7 +57,7 @@ A complete, playable **treble + bass clef note-reading game** with modes, reward
   Finished/in-progress instruments are **playable** — `PlayableInstrument` taps `playInstrument(cfg)`
   to strum a C-major chord with per-instrument timbre (`TIMBRE`: guitar pluck / banjo bright / violin
   bowed) + an `nq-strum` wiggle.
-- **IAP** (`IAP` object): RevenueCat entitlement `pro`, product `pro_unlock`. Native path uses
+- **IAP** (`IAP` object): RevenueCat entitlement `pro`, product `note_quest_pro_unlock`. Native path uses
   the Capacitor plugin (`window.Purchases`, key `window.__RC_KEY__`); web/PWA falls back to a local
   unlock (`nq-pro`) so it's testable on Pages. `UpgradeSheet` does purchase + restore. No dev toggle.
 - **App Store / Kids-category compliance:** `ParentalGate` (spelled-out multiplication + keypad) guards

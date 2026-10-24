@@ -135,14 +135,17 @@ function playInstrument(cfg){
 const track = (_ev, _props) => {};
 
 /* ── In-app purchase (RevenueCat) ──
- * Entitlement 'pro', product 'pro_unlock' (ported from Jazz Guitar Lab, nq- prefixes).
+ * Entitlement 'pro', product 'note_quest_pro_unlock' (ported from Jazz Guitar Lab, nq- prefixes).
  * Native path uses the RevenueCat Capacitor plugin when present — the iOS build assigns it to
  * window.Purchases and sets window.__RC_KEY__. On the web/PWA build there's no store, so we fall
  * back to a local unlock flag (nq-pro) so the app stays fully testable on GitHub Pages.
  * The native app NEVER takes the local-unlock path: if the plugin is missing there, purchases fail. */
 const IAP = {
   ENTITLEMENT: 'pro',
-  PRODUCT: 'pro_unlock',
+  // Must match the Product ID in App Store Connect EXACTLY. It is `note_quest_pro_unlock`, not
+  // `pro_unlock`, because product IDs are unique across the whole developer account and Archtone /
+  // Jazz Guitar Lab already owns `pro_unlock`.
+  PRODUCT: 'note_quest_pro_unlock',
   _cbs: new Set(),
   _pro: false,
   _rc: null,                                   // RevenueCat plugin, when running native
