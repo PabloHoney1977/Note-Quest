@@ -133,6 +133,57 @@ test('the legal name has no comma, matching the WI Articles', () => {
   }
 });
 
+/* ── CI config: each of these was a real failure on the sibling app ── */
+test('the iOS build targets the Xcode project, not a workspace', () => {
+  const ci = read('codemagic.yaml');
+  // Capacitor 8 uses Swift Package Manager: there is no Podfile and no .xcworkspace.
+  assert.doesNotMatch(ci, /xcworkspace/,
+    'SPM projects have no .xcworkspace — xcodebuild must target ios/App/App.xcodeproj');
+  assert.doesNotMatch(ci, /^\s*cocoapods:/m,
+    'this is an SPM project; a cocoapods key makes Codemagic look for a Podfile that does not exist');
+  assert.match(ci, /--project ios\/App\/App\.xcodeproj/, 'build-ipa must use --project');
+  assert.match(ci, /-resolvePackageDependencies/,
+    'Swift packages must be resolved before build-ipa, or it fails with status 74');
+});
+
+test('code signing creates the cert and profile rather than only fetching them', () => {
+  const ci = read('codemagic.yaml');
+  assert.match(ci, /keychain initialize/);
+  assert.match(ci, /fetch-signing-files/);
+  assert.match(ci, /--create/,
+    'a bundle id that has never been built has no profile to fetch — it must be created');
+  assert.match(ci, /--certificate-key @env:CERTIFICATE_PRIVATE_KEY/,
+    'fetch-signing-files --create cannot build a cert without a private key to derive it from');
+  assert.doesNotMatch(ci, /^\s*ios_signing:/m,
+    'an ios_signing block triggers automatic signing, which aborts before these scripts run');
+});
+
+test('CI reuses the existing App Store Connect integration and credential groups', () => {
+  const ci = read('codemagic.yaml');
+  assert.match(ci, /app_store_connect: Codemagic CI/,
+    'reuse the account-wide integration named "Codemagic CI"');
+  for (const group of ['appstore_credentials', 'revenuecat']) {
+    assert.match(ci, new RegExp(`- ${group}\\b`), `the ${group} variable group must be referenced`);
+  }
+});
+
+test('the app icon step fails the build instead of shipping a placeholder', () => {
+  const ci = read('codemagic.yaml');
+  assert.match(ci, /@capacitor\/assets generate --ios/);
+  assert.doesNotMatch(ci, /@capacitor\/assets generate --ios[^\n]*\|\|/,
+    'the icon step must not swallow failures — a placeholder icon is an automatic rejection');
+  assert.match(ci, /AppIcon-512@2x\.png/, 'the generated icon should be verified');
+  const assets = JSON.parse(read('package.json')).devDependencies['@capacitor/assets'];
+  assert.ok(assets, '@capacitor/assets must be a pinned devDependency, not an unpinned npx fetch');
+});
+
+test('TestFlight only — the App Store submission stays manual', () => {
+  const ci = read('codemagic.yaml');
+  assert.match(ci, /submit_to_testflight: true/);
+  assert.match(ci, /submit_to_app_store: false/,
+    'releases are submitted by hand from App Store Connect');
+});
+
 test('CI runs the tests before building', () => {
   const ci = read('codemagic.yaml');
   // Match the step lines, not prose — "npm run build" is also mentioned in a comment above them.

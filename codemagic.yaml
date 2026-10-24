@@ -1,10 +1,36 @@
 # Codemagic CI/CD — Note Quest iOS (Capacitor).
-# One-time setup in the Codemagic UI:
-#   • Connect an App Store Connect API key as an integration named "CodemagicASC".
-#   • Create an environment group "revenuecat" with RC_IOS_KEY = your RevenueCat *public* iOS SDK key.
-#   • Register the bundle id com.pablohoney.notequest in App Store Connect.
-#   • In App Store Connect, create the non-consumable IAP "pro_unlock" and attach it in RevenueCat
-#     (entitlement "pro", current offering) — the app reads its localized price from there.
+#
+# This config is ported from Archtone / Jazz Guitar Lab's WORKING pipeline rather than written from
+# scratch — every oddity below is a failure that app already paid for. Do not "simplify" it:
+#   • The App Store Connect integration is named "Codemagic CI" (the existing one on the account) —
+#     NOT a new per-app key. Reused as-is.
+#   • Capacitor 8 uses Swift Package Manager, NOT CocoaPods. There is no Podfile and no Xcode
+#     workspace, so every xcodebuild call targets ios/App/App.xcodeproj. Asking for a workspace fails.
+#   • Swift packages must be resolved explicitly before build-ipa, or it dies with "status 74" and
+#     hides the real error.
+#   • Signing is manual on purpose. An `ios_signing:` block triggers Codemagic's automatic signing,
+#     which only FETCHES existing profiles and aborts with "No matching profiles found" for a bundle
+#     id that has never been built. `fetch-signing-files --create --certificate-key` generates the
+#     cert and profile the first time and reuses them afterwards (the key is stable, so we never hit
+#     Apple's certificate limit).
+#
+# One-time setup in the Codemagic UI for THIS app (see STORE.md for the full walkthrough):
+#   • Add this repository as an application.
+#   • Reuse the existing App Store Connect integration named "Codemagic CI".
+#   • Variable group "appstore_credentials" — the SAME five values Archtone uses, all marked Secure:
+#       APP_STORE_APPLE_ID, APP_STORE_CONNECT_ISSUER_ID, APP_STORE_CONNECT_KEY_IDENTIFIER,
+#       APP_STORE_CONNECT_PRIVATE_KEY, CERTIFICATE_PRIVATE_KEY
+#     ⚠️ APP_STORE_APPLE_ID is PER-APP — use Note Quest's numeric Apple ID from App Store Connect,
+#     not Archtone's. The other four are account-wide and copy across unchanged.
+#   • Variable group "revenuecat" — RC_IOS_KEY = Note Quest's *public* iOS SDK key (`appl_…`).
+#     This is a different key from Archtone's: RevenueCat keys are per-app.
+#   • Register the bundle id com.pablohoney.notequest and create the non-consumable IAP "pro_unlock"
+#     in App Store Connect, then attach it in RevenueCat (entitlement "pro", current offering).
+#
+# No `triggering:` block — builds are started by hand. Pushing to main publishes the web/PWA build via
+# GitHub Pages, and we don't want every copy tweak to burn a Mac build and flood TestFlight. Add a
+# push trigger here if that changes.
+#
 # The ios/ native project is generated on the fly (npx cap add ios) so it need not be committed.
 
 workflows:
@@ -13,27 +39,47 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
     integrations:
-      app_store_connect: CodemagicASC
+      app_store_connect: Codemagic CI
     environment:
       groups:
-        - revenuecat            # provides RC_IOS_KEY (embedded into www/native.js by npm run build)
+        - appstore_credentials   # ASC API key + the cert private key (see header)
+        - revenuecat             # RC_IOS_KEY — embedded into www/native.js by npm run build
       vars:
-        XCODE_WORKSPACE: "ios/App/App.xcworkspace"
-        XCODE_SCHEME: "App"
         BUNDLE_ID: "com.pablohoney.notequest"
-      node: 22
+      node: v22
       xcode: latest
-      cocoapods: default
+      # NOTE: no `cocoapods:` — this is an SPM project (see header).
     scripts:
       - name: Install npm dependencies
         script: npm ci
-      - name: Run tests (staff/pitch mapping + freemium gate)
+
+      - name: Run tests (staff/pitch mapping, freemium gate, shipping guards)
         script: npm test
+
       - name: Build web bundle (www/) + native RevenueCat bridge
-        script: npm run build            # reads RC_IOS_KEY from the revenuecat group
+        script: npm run build            # reads RC_IOS_KEY from the revenuecat group; fails without it
+
       - name: Add iOS platform if missing
         script: |
           if [ ! -d "ios/App" ]; then npx cap add ios; fi
+
+      # App icons come from assets/icon.png (1024×1024), via the pinned @capacitor/assets devDep.
+      # This must NOT fail silently: shipping Capacitor's placeholder icon is an automatic rejection,
+      # so the step generates AND verifies, failing the build if the 1024 icon didn't land.
+      # (@capacitor/assets pulls `sharp`, which needs its native binary. If a future npm skips
+      # install scripts and this step dies on a missing sharp build, swap `npm ci` above for
+      # `npm install` — that is the only reason to.)
+      - name: Generate app icons & splash
+        script: |
+          npx @capacitor/assets generate --ios --assetPath assets
+          ICON=ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
+          if [ ! -s "$ICON" ]; then
+            echo "App icon was not generated at $ICON — refusing to ship a placeholder icon."
+            ls -R ios/App/App/Assets.xcassets/AppIcon.appiconset/ || true
+            exit 1
+          fi
+          echo "App icon generated: $(du -h "$ICON" | cut -f1)"
+
       - name: Configure Info.plist (export compliance, orientation, display name)
         script: |
           PLIST=ios/App/App/Info.plist
@@ -45,27 +91,59 @@ workflows:
           pb "Delete :UISupportedInterfaceOrientations"
           pb "Add :UISupportedInterfaceOrientations array"
           pb "Add :UISupportedInterfaceOrientations:0 string UIInterfaceOrientationPortrait"
-      - name: Generate app icons & splash
-        script: npm run assets || echo "skipping asset generation (no assets/ source)"
-      - name: Capacitor sync (copy web assets + install CocoaPods)
+
+      - name: Capacitor sync (copies www/ in and regenerates the SPM package list)
         script: npx cap sync ios
+
+      # Creates the distribution certificate + provisioning profile on first run, reuses them after.
+      # See the header for why this is manual and why --certificate-key is required.
       - name: Set up code signing
-        script: xcode-project use-profiles
+        script: |
+          keychain initialize
+          app-store-connect fetch-signing-files "$BUNDLE_ID" \
+            --type IOS_APP_STORE \
+            --certificate-key @env:CERTIFICATE_PRIVATE_KEY \
+            --create
+          keychain add-certificates
+          xcode-project use-profiles
+
       - name: Set build number
         script: |
           cd ios/App
-          agvtool new-version -all "$BUILD_NUMBER" || true
-      - name: Build IPA
+          # Highest build already on App Store Connect. `|| echo 0` guards the API erroring, and also
+          # the case where the latest build is still "Processing" (which returns 0 and would re-upload
+          # a duplicate version). 2>/dev/null keeps a noisy error out of the captured number.
+          LATEST=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID" 2>/dev/null || echo 0)
+          NEXT=$(($LATEST + 1))
+          # Codemagic's BUILD_NUMBER is monotonic and can never collide with an uploaded version —
+          # take whichever is higher so we're safe even when the API query lags or fails.
+          if [ "${BUILD_NUMBER:-0}" -gt "$NEXT" ]; then NEXT=$BUILD_NUMBER; fi
+          echo "Setting build number to $NEXT (ASC latest=$LATEST, Codemagic BUILD_NUMBER=${BUILD_NUMBER:-unset})"
+          agvtool new-version -all "$NEXT"
+
+      # Resolve the local Swift package (CapApp-SPM) explicitly — build-ipa's hidden
+      # -showBuildSettings call fails with "status 74" if packages aren't resolved first, and running
+      # xcodebuild directly surfaces the REAL error instead of build-ipa's wrapper message.
+      - name: Resolve Swift packages
+        script: |
+          xcodebuild -project ios/App/App.xcodeproj \
+            -scheme App \
+            -resolvePackageDependencies
+
+      - name: Build and sign IPA
         script: |
           xcode-project build-ipa \
-            --workspace "$XCODE_WORKSPACE" \
-            --scheme "$XCODE_SCHEME"
+            --project ios/App/App.xcodeproj \
+            --scheme App
+
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
+
     publishing:
       app_store_connect:
-        auth: integration
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
         submit_to_testflight: true
-        # beta_groups:
-        #   - Internal Testers
+        submit_to_app_store: false   # keep false — submit from App Store Connect by hand

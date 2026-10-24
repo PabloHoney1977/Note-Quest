@@ -144,8 +144,118 @@ not structural. Still worth doing if not already: enroll in the **Apple Small Bu
    two stay in sync. **Register it in the Apple Developer portal, then in App Store Connect** create
    the app and the non-consumable IAP `pro_unlock` — and submit the IAP *with* the first app version,
    not separately (Archtone's lesson: otherwise the app can be approved with a dead paywall).
-4. **RevenueCat:** create the project, attach `pro_unlock` to the entitlement `pro` and the current
-   offering, and put the public iOS key in the Codemagic `revenuecat` group as `RC_IOS_KEY`.
-   The CI build now fails if the key is missing.
-5. **Codemagic:** connect the App Store Connect API key as `CodemagicASC`, then run `ios-release`.
-6. **TestFlight:** test purchase and restore with a Sandbox account, on both iPhone and iPad.
+## Walkthrough — what's reusable from Archtone vs. new for Note Quest
+
+Archtone (Jazz Guitar Lab) is already live, so most of the plumbing exists. **Reuse, don't recreate:**
+
+| Already set up (account-wide) | Status |
+|---|---|
+| Apple Developer Program, Organization = `Highland Music LLC` | ✅ reuse |
+| Paid Applications Agreement, W-9, LLC banking | ✅ Active since 2026-08-24 |
+| DSA trader declaration (27 countries) | ✅ Active — ⚠️ see EU note below |
+| Small Business Program (15%) | submitted 2026-08-24 — **verify it was approved** |
+| RevenueCat **account** | ✅ reuse (a new *app* inside it is needed) |
+| Codemagic **account** + ASC API key integration `Codemagic CI` | ✅ reuse the integration as-is |
+| 4 of the 5 `appstore_credentials` values | ✅ copy across unchanged |
+| Sandbox tester Apple ID | ✅ reuse |
+| `support@highlandmusicapps.com` forwarding | ✅ tested working |
+| Screenshot tooling (playwright-core + installed Edge) | ✅ reuse the script pattern |
+
+**New, per-app:** bundle id registration · App Store Connect app record · Note Quest's own
+`pro_unlock` IAP · a RevenueCat **app + `appl_` key** (keys are per-app) · a Codemagic application
+and its two variable groups · screenshots · the IAP review screenshot.
+
+### Step 1 — Publish the privacy policy (do this first; it gates submission)
+`privacy.html` in the `highland-music-site` repo is **edited but uncommitted**. The old copy said the
+apps are "not directed to children under 13", which contradicts a Kids Category submission. Review,
+commit, push; Pages redeploys in ~1 min. Verify `https://highlandmusicapps.com/privacy.html` shows the
+"Children's privacy (COPPA)" heading — **App Review reads the live page, not the repo.**
+
+### Step 2 — Register the bundle id
+developer.apple.com → Certificates, Identifiers & Profiles → Identifiers → **+** → App IDs → App.
+Description "Note Quest", Bundle ID **explicit** `com.pablohoney.notequest`. Capabilities: **leave
+everything off** — the app needs none (no push, no iCloud, no sign-in). In-App Purchase is on by
+default and needs no capability toggle.
+
+### Step 3 — Create the App Store Connect app record
+My Apps → **+** → New App. Platform iOS · Name **Note Quest: Read Music Notes** · Primary language
+English (U.S.) · Bundle ID `com.pablohoney.notequest` · SKU `notequest-ios` (internal only).
+Then on the version page set, from the **Listing copy** section above: subtitle, promo text,
+description, keywords, Support + Privacy URLs, copyright.
+- **Category:** Education (primary), Music (secondary).
+- **Kids Category + age band 6–8** — set under the age rating questionnaire. Answer every content
+  question "None"; the app has no violence, no web access, no user content, no chat.
+- **Age rating:** 4+.
+- **Price:** app itself **Free**.
+- **Content Rights:** "Does not contain, show, or access third-party content" — unlike Archtone,
+  Note Quest ships **no** sampled audio (it synthesizes tones in `tone()`), so this answer differs.
+- **App Privacy:** declare **Purchases → Purchase History** only (App Functionality, not linked to
+  identity, not used for tracking), everything else **Not collected**. There is no analytics in this
+  app at all, so unlike Archtone there is nothing else to declare.
+- ⚠️ **Select "Manually release this version"** at submission, or it goes live unwatched.
+- ⚠️ **EU availability:** the DSA trader address is still the **home address** and is D&B-locked, so
+  it would display publicly on EU store pages. Either fix it at Dun & Bradstreet first
+  (`iupdate.dnb.com`, free, ~a month to propagate) **or launch US-only and add the EU later.**
+- Note the app's **numeric Apple ID** from App Information — Step 6 needs it.
+
+### Step 4 — Create the IAP
+Monetization → In-App Purchases → **+** → **Non-Consumable**.
+Reference name "Note Quest Pro" · Product ID **`pro_unlock`** (must match `IAP.PRODUCT` in `app.js`)
+· price **$4.99** tier · a localization (display name + description) · and the **required review
+screenshot of the paywall** — grab the `UpgradeSheet` from the TestFlight build in Step 8.
+⚠️ **Attach the IAP to the first version's submission.** If it goes separately the app can be approved
+with a dead paywall (Archtone's lesson).
+
+### Step 5 — RevenueCat: a new app in the existing account
+Keys are per-app, so Archtone's `appl_` key will **not** work here.
+Create a **new project** "Note Quest" (cleaner than adding an app to Archtone's project — entitlements
+and offerings are project-scoped). In it: add an **App Store** app with bundle id
+`com.pablohoney.notequest` and the shared App Store Connect credentials · create entitlement **`pro`**
+· add product **`pro_unlock`** and attach it to `pro` · create an offering (default/current) with a
+**Lifetime** package pointing at `pro_unlock`. Copy the **public iOS SDK key** (`appl_…`) — Step 6.
+
+### Step 6 — Codemagic
+Add the `Note-Quest` repo as an application. Then App settings → Environment variables, creating two
+groups (names must match `codemagic.yaml` exactly):
+- **`appstore_credentials`** — all marked **Secure**:
+  `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_IDENTIFIER`, `APP_STORE_CONNECT_PRIVATE_KEY`,
+  `CERTIFICATE_PRIVATE_KEY` → **copy these four from Archtone unchanged**, then
+  `APP_STORE_APPLE_ID` → **Note Quest's** numeric Apple ID from Step 3 (this one is per-app; using
+  Archtone's would set the build number from the wrong app).
+- **`revenuecat`** — `RC_IOS_KEY` = the `appl_…` key from Step 5. The build **fails loudly** without
+  it rather than shipping an app whose purchases can't work.
+
+The App Store Connect integration `Codemagic CI` is already on the account — just make sure this app
+can see it. Then run the **`ios-release`** workflow by hand (there's no push trigger, deliberately).
+
+**Expect the first build to need a nudge** — `ios/` is generated in CI, so this is the first time Note
+Quest has ever compiled for iOS. The config already encodes every failure Archtone hit (SPM not
+CocoaPods, manual signing with `--create`, explicit package resolution), so the likely remaining
+surprises are the `sharp` native install for icon generation and first-run certificate creation.
+
+### Step 7 — Verify the build on TestFlight
+Install from TestFlight and check: the **icon is the real Note Quest icon** (not Capacitor's
+placeholder), the app **boots with the device in airplane mode** (it must — React is vendored and
+there are no network calls), the parental gate appears before purchase and before the Privacy/Support
+links, and the staff renders correctly on **iPad** as well as iPhone.
+
+### Step 8 — Screenshots
+Required: **iPhone 6.9" (1320×2868)** and **iPad 13" (2064×2752)** — iPad is a hard block because the
+app declares iPad support. Reuse Archtone's approach: render from the live PWA with `playwright-core`
+driving installed Edge (see the `app-store-screenshots` memory and the `shoot/shoot.js` pattern),
+rather than shooting a device by hand.
+Suggested five: the staff + letter buttons · a streak/confetti moment · the Instrument Workshop ·
+bass clef with a ledger note · the results screen. Use **`?dev=1`** to unlock Pro for the bass-clef
+and game-mode shots. Note Quest defaults to the **light** theme, so shoot light.
+Also capture the **paywall sheet** for the IAP review screenshot in Step 4.
+
+### Step 9 — Sandbox purchase test
+On device, signed into the sandbox Apple ID: buy `pro_unlock`, confirm Pro unlocks, delete and
+reinstall, then confirm **Restore purchase** brings it back. Both paths sit behind the parental gate.
+
+### Step 10 — Submit
+Attach the build, confirm the IAP is attached to the version, "Manually release this version", submit.
+Then: **⛔ never press "Remove from Review"** — it forfeits queue position. Expect a slow first review
+(new app + first IAP reviewed with the binary). Watch Resolution Center *and* the Gmail spam folder;
+an information request stalls silently and looks identical to a long queue.
+After approval, buy it once with a **real card** — sandbox is not production.
