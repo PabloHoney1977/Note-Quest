@@ -184,7 +184,12 @@ English (U.S.) · Bundle ID `com.pablohoney.notequest` · SKU `notequest-ios` (i
 Then on the version page set, from the **Listing copy** section above: subtitle, promo text,
 description, keywords, Support + Privacy URLs, copyright.
 - **Category:** Education (primary), Music (secondary).
-- **Kids Category + age band 6–8** — set under the age rating questionnaire. Answer every content
+- ⚠️ **Kids Category + age band 6–8 — NOT YET SET as of the first build (2026-10-25).** App Store
+  Connect reported `Is or ever was made for kids: False` in the build log. Everything about this app
+  assumes the Kids Category: the parental gate, analytics being permanently off, the COPPA privacy
+  policy, and the "for kids" wording in the subtitle, which guideline 2.3.8 *reserves* for this
+  category. **Set it before submitting, or the listing copy has to be rewritten.** It lives in the
+  age rating questionnaire — answer every content
   question "None"; the app has no violence, no web access, no user content, no chat.
 - **Age rating:** 4+.
 - **Price:** app itself **Free**.
@@ -340,6 +345,21 @@ either: there's no Codemagic API token in this environment, so builds and their 
 Quest has ever compiled for iOS. The config already encodes every failure Archtone hit (SPM not
 CocoaPods, manual signing with `--create`, explicit package resolution), so the likely remaining
 surprises are the `sharp` native install for icon generation and first-run certificate creation.
+
+### Step 6a — Fill in TestFlight test information (first build only)
+`submit_to_testflight: true` submits the build for **external** beta review, and Apple refuses that
+until two forms are filled in. The first build fails at this step **after the binary has already
+uploaded and processed successfully** — the app is safely in App Store Connect, so this is a form to
+fill, not a build to redo. At
+`https://appstoreconnect.apple.com/apps/<APPLE_ID>/testflight/test-info`:
+- **Beta App Information → Feedback Email** → `support@highlandmusicapps.com`
+- **Beta App Review Information** → First Name, Last Name, Phone Number, Email
+
+None of this is needed for **internal** testing, so the build that just uploaded can be installed on
+your own device immediately — add yourself as an internal tester in TestFlight.
+
+**Note Quest's Apple ID is `6826598589`** (first build, 2026-10-25) — that's the value for
+`APP_STORE_APPLE_ID` in the Codemagic `appstore_credentials` group.
 
 ### Step 7 — Verify the build on TestFlight
 Install from TestFlight and check: the **icon is the real Note Quest icon** (not Capacitor's
