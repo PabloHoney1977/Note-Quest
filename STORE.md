@@ -266,6 +266,12 @@ project-scoped). Then, in order:
    The offering's identifier (`default`) is irrelevant and its "cannot be changed later" warning
    doesn't bite — `app.js` reads `offerings.current`, never an offering by name. **Being Current is
    the only thing that matters.**
+   ⚠️ **"Current" is not a field on the offering's own page** — it's a badge on the
+   **Product catalog → Offerings list**, changed from the row there. The first offering you create
+   becomes Current automatically, so usually there is nothing to click; just confirm the badge is on
+   `default` and not on a leftover Test Store offering. The real proof is the TestFlight build: if
+   the paywall button reads "Unlock Pro — $4.99", `offerings.current` resolved correctly; a bare
+   "Unlock Pro" means it didn't.
    ⚠️ **Don't skip this because purchases seem to work without it.** `IAP._package()` reads
    `offerings.current.availablePackages`; with no current offering it returns null, so `IAP.price`
    is never set and the paywall button renders as bare **"Unlock Pro"** with no price. The purchase
