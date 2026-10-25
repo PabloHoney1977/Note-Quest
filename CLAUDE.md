@@ -107,7 +107,7 @@ exploring *after* v1 ships, not a launch blocker.
    `codemagic.yaml` (generates `ios/`, syncs, TestFlight), app icons. Run `npx cap add ios` in CI.
 6. ✅ App Store readiness: parental gate, native-safe IAP + localized price, analytics off natively,
    vendored React, Info.plist patches in `codemagic.yaml`, `STORE.md`. Remaining steps are manual —
-   see `STORE.md` → "Still to do by hand" (privacy policy covering kids is the big one).
+   see `STORE.md` → "Walkthrough" for the 10-step submission sequence and its current state.
 7. ✅ **Pricing researched → `$4.99`** (2026-10-24). See `## Pricing` above.
 8. ✅ **Ported the two Jazz-Guitar-Lab launch lessons** (2026-10-24) — both were real bugs here:
    - **Pro leak closed.** The public web build (this repo is public with Pages on) unlocked all of Pro
@@ -118,7 +118,7 @@ exploring *after* v1 ships, not a launch blocker.
      `error` or 5s) that offers Reload, and the `ReactDOM` mount is in try/catch. Guarded by a
      `__nqMounted` flag so a later error can't wipe a running app.
    - `test/shipping.test.cjs` guards both; **verified they actually fail when each bug is put back.**
-9. **Test suite: `npm test` → 35 tests** (`test/theory.test.cjs` + `test/shipping.test.cjs`), wired
+9. **Test suite: `npm test` → 42 tests** (`test/theory.test.cjs` + `test/shipping.test.cjs`), wired
    into `codemagic.yaml` before the build. The whole staff/pitch map is asserted on both clefs.
 10. **Teacher outreach kit** (printable + studio-license concept) — the growth lever, still to do.
 11. ✅ **Two launch decisions settled 2026-10-24 (user's call):**
