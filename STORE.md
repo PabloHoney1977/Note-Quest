@@ -255,6 +255,17 @@ project-scoped). Then, in order:
    hardcodes `IAP.ENTITLEMENT = 'pro'`, so anything else silently never grants Pro.
 3. Add product **`note_quest_pro_unlock`** and attach it to `pro`.
 4. Create an offering, mark it **Current**, with a **Lifetime** package holding `note_quest_pro_unlock`.
+   RevenueCat pre-fills a new offering with **three packages** (`$rc_monthly`, `$rc_annual`,
+   `$rc_lifetime`), each wired only to its **Test Store** demo product and showing **"No product"**
+   for the App Store app. ⚠️ **Set the "Note Quest (App Store)" dropdown on `$rc_lifetime` to
+   `note_quest_pro_unlock`** — until you do, the offering contains nothing for iOS at all.
+   Then **delete `$rc_monthly` and `$rc_annual`**: not because they break anything (RevenueCat omits
+   product-less packages from `availablePackages` on device, and `_package()` finds by identifier
+   anyway) but because this app has no subscriptions, and subscription shells in the Current offering
+   mislead anyone reading it later. The `test_` products are inert on iOS; clear them or don't.
+   The offering's identifier (`default`) is irrelevant and its "cannot be changed later" warning
+   doesn't bite — `app.js` reads `offerings.current`, never an offering by name. **Being Current is
+   the only thing that matters.**
    ⚠️ **Don't skip this because purchases seem to work without it.** `IAP._package()` reads
    `offerings.current.availablePackages`; with no current offering it returns null, so `IAP.price`
    is never set and the paywall button renders as bare **"Unlock Pro"** with no price. The purchase
