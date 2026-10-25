@@ -291,9 +291,21 @@ Add the `Note-Quest` repo as an application. Then App settings → Environment v
 groups (names must match `codemagic.yaml` exactly):
 - **`appstore_credentials`** — all marked **Secure**:
   `APP_STORE_CONNECT_ISSUER_ID`, `APP_STORE_CONNECT_KEY_IDENTIFIER`, `APP_STORE_CONNECT_PRIVATE_KEY`,
-  `CERTIFICATE_PRIVATE_KEY` → **copy these four from Archtone unchanged**, then
-  `APP_STORE_APPLE_ID` → **Note Quest's** numeric Apple ID from Step 3 (this one is per-app; using
-  Archtone's would set the build number from the wrong app).
+  `CERTIFICATE_PRIVATE_KEY`, plus `APP_STORE_APPLE_ID` → **Note Quest's** numeric Apple ID
+  (ASC → the app → App Information → Apple ID). That last one is **per-app**; using Archtone's would
+  read build numbers off the wrong app.
+
+  ⚠️ **"Copy them from Archtone" may not be literally possible — Codemagic Secure variables are
+  write-only and cannot be read back.** Check **Team settings → Global variables and secrets** first:
+  if the group lives there, this app inherits it and there is nothing to re-enter. If it was created
+  per-app on Archtone, re-source the values instead:
+  - *Issuer ID* and *Key ID* — re-readable any time at ASC → Users and Access → Integrations.
+  - *`APP_STORE_CONNECT_PRIVATE_KEY`* — the saved `.p8`; if lost, generate a new ASC API key, which
+    costs nothing.
+  - *`CERTIFICATE_PRIVATE_KEY`* — **worth hunting for.** Reusing the same RSA key makes
+    `fetch-signing-files --create` regenerate the *same* distribution certificate; a fresh key
+    creates a *second* one, and Apple caps how many you can hold. Not fatal (there's room for one
+    more alongside Archtone's) but avoidable churn.
 - **`revenuecat`** — `RC_IOS_KEY` = the `appl_…` key from Step 5. The build **fails loudly** without
   it rather than shipping an app whose purchases can't work.
 
