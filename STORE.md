@@ -302,10 +302,19 @@ groups (names must match `codemagic.yaml` exactly):
   - *Issuer ID* and *Key ID* — re-readable any time at ASC → Users and Access → Integrations.
   - *`APP_STORE_CONNECT_PRIVATE_KEY`* — the saved `.p8`; if lost, generate a new ASC API key, which
     costs nothing.
-  - *`CERTIFICATE_PRIVATE_KEY`* — **worth hunting for.** Reusing the same RSA key makes
-    `fetch-signing-files --create` regenerate the *same* distribution certificate; a fresh key
-    creates a *second* one, and Apple caps how many you can hold. Not fatal (there's room for one
-    more alongside Archtone's) but avoidable churn.
+  - *`CERTIFICATE_PRIVATE_KEY`* — **Archtone's is unrecoverable.** It was generated with
+    `openssl genrsa 2048` and pasted straight into Codemagic as a Secure var, never saved elsewhere
+    (see the `codemagic-ios-build` memory), and Secure vars can't be read back. Codemagic's **global**
+    variables are also empty *and* deprecated for personal accounts, so there is nothing to inherit.
+    A fresh key was generated for Note Quest on 2026-10-25:
+
+    > `C:\Users\pehre\Downloads\NoteQuest-signing\cert_key`
+
+    Paste its **entire contents** (including the `-----BEGIN/END PRIVATE KEY-----` lines) as
+    `CERTIFICATE_PRIVATE_KEY`, then **store it in a password manager and delete the file** — if it's
+    lost again, the next app repeats this. A new key means `fetch-signing-files --create` makes a
+    **second** distribution certificate alongside Archtone's, which is fine (Apple allows more than
+    one); it's then reused on every later Note Quest build because this key is stable.
 - **`revenuecat`** — `RC_IOS_KEY` = the `appl_…` key from Step 5. The build **fails loudly** without
   it rather than shipping an app whose purchases can't work.
 
