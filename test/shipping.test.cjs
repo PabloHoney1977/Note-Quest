@@ -146,6 +146,21 @@ test('the docs quote the same product id the code uses', () => {
   }
 });
 
+test('the RevenueCat plugin is new enough for this Capacitor major', () => {
+  // @revenuecat/purchases-capacitor v11 pins capacitor-swift-pm 7.x, which cannot resolve against
+  // Capacitor 8 — the iOS build dies at "Could not resolve package dependencies" during the SPM
+  // step, long after npm install has happily succeeded. Archtone lost builds to this; v13+ declares
+  // a `@capacitor/core >=8` peer. Keep the two majors in step.
+  const deps = JSON.parse(read('package.json')).dependencies;
+  const major = (range) => parseInt(String(range).replace(/^[^0-9]*/, ''), 10);
+  const cap = major(deps['@capacitor/core']);
+  const rc = major(deps['@revenuecat/purchases-capacitor']);
+  assert.ok(cap >= 8, `unexpected Capacitor major ${cap} — revisit this pairing`);
+  assert.ok(rc >= 13,
+    `@revenuecat/purchases-capacitor v${rc} cannot resolve SPM against Capacitor ${cap}; needs >=13`);
+  assert.strictEqual(major(deps['@capacitor/ios']), cap, '@capacitor/ios must match @capacitor/core');
+});
+
 /* ── Store metadata consistency ── */
 test('the bundle id matches between capacitor config and CI', () => {
   const appId = JSON.parse(read('capacitor.config.json')).appId;
