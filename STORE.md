@@ -300,8 +300,17 @@ groups (names must match `codemagic.yaml` exactly):
   if the group lives there, this app inherits it and there is nothing to re-enter. If it was created
   per-app on Archtone, re-source the values instead:
   - *Issuer ID* and *Key ID* — re-readable any time at ASC → Users and Access → Integrations.
-  - *`APP_STORE_CONNECT_PRIVATE_KEY`* — the saved `.p8`; if lost, generate a new ASC API key, which
-    costs nothing.
+  - *`APP_STORE_CONNECT_PRIVATE_KEY`* — the saved `.p8`; if lost, generate a new one, which costs
+    nothing and disturbs nothing existing.
+    ⚠️ **There are two kinds of `.p8` and only one works here.** Apple names them by type:
+    **`AuthKey_<KEYID>.p8`** is an **App Store Connect API** key (Users and Access → Integrations →
+    App Store Connect API) and is the one Codemagic needs — it signs, reads build numbers and
+    uploads to TestFlight. **`SubscriptionKey_<KEYID>.p8`** is an **In-App Purchase** key and is the
+    one RevenueCat asked for in step 5.1; it cannot build anything. Grabbing the wrong file gives a
+    confusing authorization failure rather than a clear "wrong key" message.
+    `APP_STORE_CONNECT_KEY_IDENTIFIER` must be *that* key's Key ID — it's the ten characters in the
+    filename — and `APP_STORE_CONNECT_ISSUER_ID` is shown at the top of the same tab. All three are
+    a matching set. A new key needs **App Manager** access.
   - *`CERTIFICATE_PRIVATE_KEY`* — **Archtone's is unrecoverable.** It was generated with
     `openssl genrsa 2048` and pasted straight into Codemagic as a Secure var, never saved elsewhere
     (see the `codemagic-ios-build` memory), and Secure vars can't be read back. Codemagic's **global**
