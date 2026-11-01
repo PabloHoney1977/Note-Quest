@@ -144,5 +144,14 @@ the EIN look like an open blocker — it isn't.
 - ✅ LLC checking + W-9 + **Paid Applications Agreement ACTIVE** (2026-08-24) — IAP can be sold.
 - ✅ **Archtone (Jazz Guitar Lab) is already live on the App Store** with five 5★ reviews and a live
   `$14.99 pro_unlock`. So Codemagic → TestFlight → App Review is a **proven** path for this stack.
-- ⚠️ `npm test`/`npm run build` verified locally 2026-10-24; the **iOS build itself is still unrun** —
-  `ios/` is generated in CI, so the first Codemagic run is the first real compile.
+- ✅ **iOS build GREEN and SUBMITTED FOR REVIEW 2026-11-01.** Version 1.0, Apple ID **6826598589**,
+  `note_quest_pro_unlock` attached, tested on device via TestFlight first. The Codemagic pipeline
+  compiled, signed, uploaded and processed on its first real run.
+  - Two things fixed on the way that would each have failed it: `@revenuecat/purchases-capacitor`
+    was on **v11**, which can't resolve Swift packages against Capacitor 8 (now ^13.7.6), and the
+    screenshots were rendered at 6.9" (1320×2868), which matches none of App Store Connect's current
+    device-type slots (now 1206×2622 / 2007×2853 / 2064×2752).
+  - Archtone's Codemagic signing key was **unrecoverable** (Secure vars can't be read back, and it was
+    never saved elsewhere), so Note Quest has its own — store it in a password manager, not on disk.
+  - **Waiting on Apple.** ⛔ Never "Remove from Review". Watch Resolution Center *and* Gmail spam.
+    After approval: Release → **buy once with a real card** (sandbox ≠ production) → teacher outreach kit.

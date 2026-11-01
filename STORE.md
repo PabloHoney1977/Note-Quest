@@ -405,9 +405,30 @@ every PNG is exactly the required pixel size. Note Quest opens **light**, so the
 On device, signed into the sandbox Apple ID: buy `note_quest_pro_unlock`, confirm Pro unlocks, delete and
 reinstall, then confirm **Restore purchase** brings it back. Both paths sit behind the parental gate.
 
-### Step 10 — Submit
-Attach the build, confirm the IAP is attached to the version, "Manually release this version", submit.
-Then: **⛔ never press "Remove from Review"** — it forfeits queue position. Expect a slow first review
-(new app + first IAP reviewed with the binary). Watch Resolution Center *and* the Gmail spam folder;
-an information request stalls silently and looks identical to a long queue.
-After approval, buy it once with a **real card** — sandbox is not production.
+### Step 10 — Submit ✅ SUBMITTED FOR REVIEW 2026-11-01
+Version **1.0**, Apple ID **6826598589**, with `note_quest_pro_unlock` attached.
+
+⚠️ **Apple moved where in-app purchases get submitted.** As of their 2026-07-15 release notes they go
+through **Add for Review on the In-App Purchases page**, not the old "In-App Purchases and
+Subscriptions" section on the version page — that section is simply absent for many apps now, and
+developers widely mistake it for a missing setup step. The first purchase of each type still has to
+be reviewed alongside an app version. The reliable confirmation is the **submission summary shown
+just before the final Submit** — if the product isn't listed there, don't submit.
+
+**While waiting:**
+- ⛔ **Never press "Remove from Review"** — it forfeits queue position entirely.
+- Expect it to be slow: new app, first IAP reviewed with the binary, Kids Category.
+- Watch **Resolution Center** *and* the **Gmail spam folder**. An information request stalls
+  silently and looks identical to a long queue from the outside.
+- Confirm **"Manually release this version"** is selected — it's still editable during review. Without
+  it the app goes live the moment it's approved, whenever that happens.
+
+**After approval:**
+1. Press **Release**.
+2. **Buy it once with a real card.** Sandbox is a different system; this is the only proof the real
+   purchase works end to end.
+3. Then the **teacher outreach kit** — the actual growth lever for this app (CLAUDE.md).
+
+**Decision recorded 2026-11-01:** shipping to **all territories including the EU**, knowingly leaving
+the DSA trader address as the home address, which becomes publicly visible on EU store pages. Fixing
+it later means updating Dun & Bradstreet (`iupdate.dnb.com`, free, ~a month to propagate).
