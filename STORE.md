@@ -223,7 +223,7 @@ covering the same four things the in-app paywall promises — App Review compare
 
 **Required review screenshot of the paywall:**
 
-> `C:\Users\pehre\Downloads\NoteQuest-AppStore-Screenshots\iPhone-6.9\6-paywall.png`
+> `C:\Users\pehre\Downloads\NoteQuest-AppStore-Screenshots\iPhone-6.3-medium\6-paywall.png`
 
 ⚠️ Until the localization, price **and** screenshot are all in, the IAP sits at **"Missing Metadata"**
 and RevenueCat shows that same status — which also means **sandbox purchases will fail**. It needs to
@@ -367,9 +367,21 @@ placeholder), the app **boots with the device in airplane mode** (it must — Re
 there are no network calls), the parental gate appears before purchase and before the Privacy/Support
 links, and the staff renders correctly on **iPad** as well as iPhone.
 
-### Step 8 — Screenshots ✅ DONE 2026-10-24
-**12 PNGs, all at Apple's exact required sizes**, in
-`~/Downloads/NoteQuest-AppStore-Screenshots/{iPhone-6.9,iPad-13}/`:
+### Step 8 — Screenshots ✅ DONE (re-rendered 2026-11-01 for Apple's device-type slots)
+**18 PNGs, all at Apple's exact required sizes**, under
+`C:\Users\pehre\Downloads\NoteQuest-AppStore-Screenshots\`:
+
+| Upload slot in App Store Connect | Folder | Size |
+|---|---|---|
+| iPhone with Dynamic Island (medium display) | `iPhone-6.3-medium\` | 1206 × 2622 |
+| iPhone Duo *(optional slot)* | `iPhone-Duo\` | 2007 × 2853 |
+| iPad 13" display *(required — iPad support is declared)* | `iPad-13\` | 2064 × 2752 |
+
+Apple Watch is not a target — skip that slot. ⚠️ App Store Connect lists these **by device type, not
+inch size**, and the set changes; the old 6.9" (1320 × 2868) folder no longer matches any slot, so
+`DEVICES` in the render script is the thing to update when the page changes again.
+
+Each folder holds the same six shots:
 
 | # | Shot | What it shows |
 |---|---|---|
@@ -380,8 +392,8 @@ links, and the staff renders correctly on **iPad** as well as iPhone.
 | 5 | `results` | end of a Lives run — 112, 7/10, 70%, best streak 7, sticker shelf |
 | 6 | `paywall` | **this is the IAP review screenshot for Step 4** — real "Unlock Pro — $4.99" + Restore |
 
-Upload 1–5 as the store screenshots (Apple's page is by device type; iPhone 6.9" and iPad 13" are
-the two required). Use **6** as the IAP review screenshot, not as a store screenshot.
+Upload **1–5** into each device slot. **6 is not a store screenshot** — it's the IAP review
+screenshot that Step 4 attaches to `note_quest_pro_unlock`, and only one copy is needed.
 
 Regenerate any time with `npm i -D playwright-core && node scripts/shoot-screenshots.cjs` — it
 renders from the repo itself (no device, no simulator, no Mac) by driving installed Edge, presets

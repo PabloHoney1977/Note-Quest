@@ -29,9 +29,12 @@ const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(os.homedir(), 'Downloads', 'NoteQuest-AppStore-Screenshots');
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
 
+// App Store Connect's upload page is organised by DEVICE TYPE, not inch size. These three names
+// match the slots it shows; Apple Watch is skipped (not a target).
 const DEVICES = [
-  { name: 'iPhone-6.9', w: 440, h: 956, dsf: 3 },   // → 1320 × 2868
-  { name: 'iPad-13', w: 1032, h: 1376, dsf: 2 },    // → 2064 × 2752  (required: iPad is declared)
+  { name: 'iPhone-6.3-medium', w: 402, h: 874, dsf: 3 },   // → 1206 × 2622  "iPhone with Dynamic Island (medium display)"
+  { name: 'iPhone-Duo', w: 669, h: 951, dsf: 3 },          // → 2007 × 2853  "iPhone Duo" (optional slot)
+  { name: 'iPad-13', w: 1032, h: 1376, dsf: 2 },           // → 2064 × 2752  required — the app declares iPad support
 ];
 
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.json': 'application/json',
